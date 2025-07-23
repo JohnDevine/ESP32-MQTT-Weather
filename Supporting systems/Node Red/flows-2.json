@@ -1,0 +1,104 @@
+[
+    {
+        "id": "9745955f4d16136d",
+        "type": "tab",
+        "label": "Weather",
+        "disabled": false,
+        "info": "",
+        "env": []
+    },
+    {
+        "id": "8d4e92948e661563",
+        "type": "mqtt in",
+        "z": "9745955f4d16136d",
+        "name": "Get data for weather",
+        "topic": "land/home/weather/#",
+        "qos": "2",
+        "datatype": "auto-detect",
+        "broker": "4e9759aa5d998d78",
+        "nl": false,
+        "rap": true,
+        "rh": 0,
+        "inputs": 0,
+        "x": 150,
+        "y": 100,
+        "wires": [
+            [
+                "34e0ae6174fbd0ca"
+            ]
+        ]
+    },
+    {
+        "id": "34e0ae6174fbd0ca",
+        "type": "function",
+        "z": "9745955f4d16136d",
+        "name": "Setup for HTTP influb 2 write.",
+        "func": "// === InfluxDB Auth Token ===\nconst token = \"CQcuM3A6AWK7p6z4wDl6eCkWPN-4QAeya-MVy7Yv7NEby2QVN0GMXJmyhnpFsS9h6YzOn0H9rW0yeXvVs9oxag==\";  // Replace if needed\n\n// === Line Protocol Setup ===\nconst measurement = \"Readings\";  // measurement name\nconst tags = {\n    sensor: \"BH1750-office-01\"  // Optional: use MQTT topic or static ID here\n};\n\n// === Extract Data ===\nconst processor = msg.payload.processor || {};\nconst data = msg.payload.data || {};\n\nconst fields = {\n    // === Processor Data ===\n    wifiRSSI: processor.WiFiRSSI,\n    ipAddress: processor.IPAddress ? `\"${processor.IPAddress}\"` : undefined,\n    cpuTemperature: processor.CPUTemperature,\n    softwareVersion: processor.SoftwareVersion ? `\"${processor.SoftwareVersion}\"` : undefined,\n    chipID: processor.ChipID ? `\"${processor.ChipID}\"` : undefined,\n    wdtRestartCount: processor.WDTRestartCount,\n\n    // === Sensor Data ===\n    sunlight: data.sunlight,\n    sensor_ok: data.sensor_ok ? 1 : 0  // convert boolean to numeric\n};\n\n// === Convert to Line Protocol ===\nconst tagString = Object.entries(tags)\n    .map(([k, v]) => `${k}=${v}`)\n    .join(',');\n\nconst fieldString = Object.entries(fields)\n    .filter(([_, v]) => v !== undefined && v !== null)\n    .map(([k, v]) => {\n        if (typeof v === \"string\") return `${k}=${v}`;\n        return `${k}=${v}`;\n    })\n    .join(',');\n\nconst timestamp = Date.now() * 1_000_000; // nanoseconds\nmsg.payload = `${measurement},${tagString} ${fieldString} ${timestamp}`;\n\n// === HTTP Request Setup ===\nmsg.headers = {\n    \"Authorization\": \"Token \" + token,\n    \"Content-Type\": \"text/plain\"\n};\nmsg.method = \"POST\";\nmsg.url = \"http://influxdb2:8086/api/v2/write?org=solarblue&bucket=Weather&precision=ns\";\n\nreturn msg;",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 470,
+        "y": 220,
+        "wires": [
+            [
+                "b14387734726e241"
+            ]
+        ]
+    },
+    {
+        "id": "b14387734726e241",
+        "type": "http request",
+        "z": "9745955f4d16136d",
+        "name": "Write to INFLUX 2",
+        "method": "use",
+        "ret": "txt",
+        "paytoqs": "ignore",
+        "url": "",
+        "tls": "",
+        "persist": false,
+        "proxy": "",
+        "insecureHTTPParser": false,
+        "authType": "",
+        "senderr": false,
+        "headers": [],
+        "x": 770,
+        "y": 300,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "4e9759aa5d998d78",
+        "type": "mqtt-broker",
+        "name": "MQTT on RaspberryJack",
+        "broker": "mqtt://mosquitto:1883",
+        "port": "1883",
+        "clientid": "",
+        "autoConnect": true,
+        "usetls": false,
+        "protocolVersion": "4",
+        "keepalive": "60",
+        "cleansession": true,
+        "autoUnsubscribe": true,
+        "birthTopic": "",
+        "birthQos": "0",
+        "birthRetain": "false",
+        "birthPayload": "",
+        "birthMsg": {},
+        "closeTopic": "",
+        "closeQos": "0",
+        "closeRetain": "false",
+        "closePayload": "",
+        "closeMsg": {},
+        "willTopic": "",
+        "willQos": "0",
+        "willRetain": "false",
+        "willPayload": "",
+        "willMsg": {},
+        "userProps": "",
+        "sessionExpiry": ""
+    }
+]

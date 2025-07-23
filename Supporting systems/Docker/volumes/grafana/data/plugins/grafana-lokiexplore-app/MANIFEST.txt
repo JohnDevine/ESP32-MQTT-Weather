@@ -1,0 +1,68 @@
+
+-----BEGIN PGP SIGNED MESSAGE-----
+Hash: SHA512
+
+{
+  "manifestVersion": "2.0.0",
+  "signatureType": "grafana",
+  "signedByOrg": "grafana",
+  "signedByOrgName": "Grafana Labs",
+  "plugin": "grafana-lokiexplore-app",
+  "version": "1.0.19",
+  "time": 1750781662664,
+  "keyId": "7e4d0c6a708866e7",
+  "files": {
+    "649058283f564041551d.wasm": "84a1635aaca10061a9fad641983327dc9d261fb2cd3ca5ff3dd26bf3072664df",
+    "plugin.json": "b2e0876c35aee20d9370197e97f8c7a9aa6e89f94aafa492a4c8f2e8d6f4b0ed",
+    "388.js.map": "7135b7e6576fc707035a8adb04cebcb226f71c07cd604c8577856f6acf3cff2c",
+    "944.js": "50d0e55fc61eb78dc3137f90347bca6523c925e295b304043f6a80d87852df97",
+    "388.js": "889232a336bb78a3b82606a2734ef750053108d1ace346f3c5d2fa7b561e01c4",
+    "826.js.map": "dec034c1626b04942735eb9200d4899659e5d08bb841dd21b916901a08bf7a83",
+    "README.md": "860a469ddc8cb370958c5d2bb044d258fcf383e72bee36d933e72d2e727e720b",
+    "img/explore-logs-features.jpeg": "18675a62a579da52f0b1cc58796eba8896c38333de4b28f0b1e67476b6f63dd6",
+    "img/drilldown-features.png": "f43cb1e498df7c4f70e10768306e52cb00bc8f24e66259a4dd91d55cf3be0948",
+    "img/service_logs.jpg": "42f41204403337358ae437a7ad052daec6f9b6f9bef7f297fd065c1e68133bf4",
+    "img/grot_err.svg": "6f535973a005418084ad6218f78f2e0e92a7a06efb7e66a05a89c35be59eb154",
+    "img/fields.png": "0b087967a82bb1a6026c35b03bfe2073b35c4da13972abf59bb9a4a404256727",
+    "img/grot_loki.svg": "299c18dd3db308247925207b1623c2c16f465982866b9b60b78b927a9bfa5820",
+    "img/grot_err_light.svg": "eb43595481ac03b7569f9909d9e093629dfbf7001f4c95c435c53a6987397662",
+    "img/patterns.png": "bf100549ec168420e9a7b6d759f492a761f964d33d45a3217ba30b9827b2bece",
+    "img/logo.svg": "11ca1cf6edec87db3a9725b071f17c93c2313d9130d31d37da3458509a8ff67b",
+    "img/table.png": "fe2fa65a8a761feb0a93c62231644645fb60ee06c44dda3ab16dc4e432286572",
+    "470.js.map": "7c1f79602e5b10d8b4d89e270f6ff7ba93ecdab4b5c2871b173945501a94fcb1",
+    "328.js.map": "f568a30bfd7c774f2ab027f0e5ada980ee23b5f0e09cdebbac317d9d9c4e8faa",
+    "546.js.map": "31070d537b1f22abb72e0547d111747e9a10b4ccb1deea07ca1484a37eedb128",
+    "388.js.LICENSE.txt": "9e0cb6b0d82ee46be39b054a3f76419242945d9dbfced78bca42fd65c082e71a",
+    "919.js": "aa9d9543a542b68387d1fca979c02c11295207907370c35d5887f96c23d4bc54",
+    "854.js.map": "2da9b6cb9484c9e5a06b3eb1b9e5fbfd3c1e7436137273d53fa4433e066edde8",
+    "LICENSE": "8486a10c4393cee1c25392769ddd3b2d6c242d6ec7928e1414efff7dfb2f07ef",
+    "677.js": "2a5b3c84ad932158a014cba212edb15927f47939daf069f6af4d10bd3dfa8b3a",
+    "module.js.map": "e61b0e5c07c6ef6ffaa3037db1521dd6d1a15551b72757f1ba4befbba3b6ad6c",
+    "3d96a93cfcb32df74eef.svg": "11ca1cf6edec87db3a9725b071f17c93c2313d9130d31d37da3458509a8ff67b",
+    "826.js": "1b15a452bcf7b4a7e7f205ed6136765bfb9f59c7f9db089ad9270424f0b241f9",
+    "328.js": "d93160f44411e8ba603eb1323d7d3e648ea9ab5137a9df229e9754d522872ff1",
+    "546.js": "79ecd141f81ae989b32a4fa39498fd806fdd04c827492efe3408b921deddb7e4",
+    "82.js.map": "0ee64d74372c810a88ab17d93852cfe10424dfc5babcb2e584a70759f0979106",
+    "854.js": "421be9b543902b99c85c30153ce2da0ff9822dfefae9229dd201f0e9208dc0bd",
+    "919.js.map": "176002433edc498049515f9bee9ccd780f48d5c768b522293d5404af7ecdeba3",
+    "module.js": "8d67658442e182fcbc6a4efb1f35c264fda4fbbf23446e8199857e04bbb3d0f1",
+    "CHANGELOG.md": "398895aa175a79400c02f0225b62acf7dbce52b4571b700d2aca8bf25033a584",
+    "470.js.LICENSE.txt": "e25e5f78cf2b2fbbf8d4865193c9642bea9f75a1ba1323a8476a534310b26d58",
+    "470.js": "6b6601759960132707ae93546acd1032f6ee3c9ed214e618258a62ff52aec250",
+    "1759fd27b2c9f73dea05.wasm": "c79b8fa1bea557bdcd6b743a00e5c47aef7f71a457dcbaa63218dd4a706475b6",
+    "82.js": "c32433c00e7bfe062116f15696260a39c2efe7a78e73f1c435c8b5eb8c2177cd",
+    "944.js.map": "b2a93650921f2dbe9917a3b382ba0627ae2d67d74c8d6f9a4422877a2882adff",
+    "677.js.map": "dc3cb160f2cc363dfd92416a8b442ec721be40772b549c35637d4ddeba9a486d"
+  }
+}
+-----BEGIN PGP SIGNATURE-----
+Version: OpenPGP.js v4.10.11
+Comment: https://openpgpjs.org
+
+wrkEARMKAAYFAmhazt4AIQkQfk0ManCIZucWIQTzOyW2kQdOhGNlcPN+TQxq
+cIhm5/scAgkAZRfMfiQbl7mK6EfungiOvxqE3xhAxp1i91ujFRuGBE4d4VM4
+WiQ915b46HmPGOKryDJV46uE25zHFTiQHGwMv2MCCQGnIfgyvI37gxriqozT
+j0finhJLOkXxhok1NE/v0eMQon1WfCCDaCrExC11w7or66gDkBAR3YDo94Gx
+XHGHhZlwTw==
+=DvFx
+-----END PGP SIGNATURE-----

@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<module fritzingVersion="1.0.5.2025-04-02.CD-2176-0-b9add9ea" icon="Mine.png">
+    <title>My Parts</title>
+    <instances>
+        <instance moduleIdRef="esp32_p30_w11_9de09df6ee672a047957b8e804927eb5_1" modelIndex="5797" path="/Users/johndevine/Documents/Fritzing/parts/user/esp32_p30_w11_9de09df6ee672a047957b8e804927eb5_1.fzp">
+            <views/>
+        </instance>
+        <instance moduleIdRef="prefix0000_6c3bd1dce83f59a2e8022de8fbc29f3f_1" modelIndex="6217" path="/Users/johndevine/Documents/Fritzing/parts/user/prefix0000_6c3bd1dce83f59a2e8022de8fbc29f3f_1.fzp">
+            <views/>
+        </instance>
+        <instance moduleIdRef="MAX485-Breakout_1" modelIndex="6270" path="/Users/johndevine/Documents/Fritzing/parts/user/MAX485-Breakout_1.fzp">
+            <views/>
+        </instance>
+        <instance moduleIdRef="Breadboard-RSR03MB102-ModuleID" modelIndex="6274" path="/Applications/Fritzing.app/Contents/Resources/fritzing-parts/core/breadboard2.fzp">
+            <views/>
+        </instance>
+        <instance moduleIdRef="prefix101222_95289f6ae704abc4c393e28792b57a8c_4" modelIndex="6275" path="/Users/johndevine/Documents/Fritzing/parts/user/prefix101222_95289f6ae704abc4c393e28792b57a8c_4.fzp">
+            <views/>
+        </instance>
+    </instances>
+</module>

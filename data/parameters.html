@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>ESP32 Parameters</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        :root {
+            --primary: #1976d2;
+            --primary-dark: #115293;
+            --background: #f5f7fa;
+            --card-bg: #fff;
+            --border-radius: 16px;
+            --shadow: 0 2px 16px rgba(0,0,0,0.08);
+        }
+        body {
+            font-family: 'Segoe UI', Arial, sans-serif;
+            background: var(--background);
+            margin: 0;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .container {
+            background: var(--card-bg);
+            border-radius: var(--border-radius);
+            box-shadow: var(--shadow);
+            padding: 2.5em 2em 2em 2em;
+            max-width: 400px;
+            width: 100%;
+        }
+        h2 {
+            color: var(--primary);
+            margin-top: 0;
+            text-align: center;
+        }
+        label {
+            display: block;
+            margin-top: 1.2em;
+            color: #333;
+            font-weight: 500;
+        }
+        input[type=text], input[type=password], input[type=number] {
+            width: 100%;
+            padding: 0.7em;
+            margin-top: 0.3em;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            font-size: 1em;
+            box-sizing: border-box;
+            background: #f9f9f9;
+            transition: border 0.2s;
+        }
+        input:focus {
+            border: 1.5px solid var(--primary);
+            outline: none;
+        }
+        button {
+            width: 100%;
+            margin-top: 2em;
+            padding: 0.9em 0;
+            background: var(--primary);
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            font-size: 1.1em;
+            font-weight: 600;
+            cursor: pointer;
+            box-shadow: 0 1px 4px rgba(25, 118, 210, 0.08);
+            transition: background 0.2s;
+        }
+        button:hover {
+            background: var(--primary-dark);
+        }
+        input[type="file"] {
+            width: 100%;
+            padding: 0.7em;
+            margin-top: 0.3em;
+            border: 2px dashed #ccc;
+            border-radius: 8px;
+            font-size: 1em;
+            box-sizing: border-box;
+            background: #f9f9f9;
+            transition: border 0.2s;
+        }
+        input[type="file"]:hover {
+            border-color: var(--primary);
+        }
+        #msg {
+            margin-top: 1.5em;
+            color: green;
+            text-align: center;
+            font-weight: 500;
+        }
+        .display-field {
+            padding: 0.7em;
+            margin-top: 0.3em;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 1em;
+            box-sizing: border-box;
+            background: #f0f0f0;
+        }
+        @media (max-width: 600px) {
+            .container {
+                padding: 1.2em 0.5em 1.5em 0.5em;
+                max-width: 98vw;
+            }
+            h2 {
+                font-size: 1.3em;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>ESP32 Configuration</h2>
+        <div id="sysinfo" style="margin-bottom:1.5em;">
+            <label>Program Version:
+                <span id="sysinfo_version" class="display-field">Loading...</span>
+            </label><br>
+            <label>Build Date &amp; Time:
+                <span id="sysinfo_build" class="display-field">Loading...</span>
+            </label><br>
+            <label>Core/SDK Version:
+                <span id="sysinfo_sdk" class="display-field">Loading...</span>
+            </label><br>
+            <label>Restart Reason:
+                <span id="sysinfo_restart" class="display-field">Loading...</span>
+            </label><br>
+            <label>ESP Chip Id:
+                <span id="sysinfo_chipid" class="display-field">Loading...</span>
+            </label><br>
+            <label>Flash Chip Id:
+                <span id="sysinfo_flashid" class="display-field">Loading...</span>
+            </label><br>
+            <label>Flash Size:
+                <span id="sysinfo_flashsize" class="display-field">Loading...</span>
+            </label>
+        </div>
+        <form id="paramsForm">
+            <label>WiFi SSID:
+                <input type="text" name="ssid" id="ssid" placeholder="Enter WiFi network name" required>
+            </label>
+            <label>WiFi Password:
+                <input type="password" name="password" id="password" required>
+            </label>
+            <label>MQTT Broker URL:
+                <input type="text" name="mqtt_url" id="mqtt_url" required>
+            </label>
+            <label>Sample Interval (ms):
+                <input type="number" name="sample_interval" id="sample_interval" min="100" max="86400000" required>
+            </label>
+            <label>Data Topic:
+                <input type="text" name="data_topic" id="data_topic" maxlength="40" required>
+            </label>
+            <label>Watchdog Reset Counter:
+                <input type="number" name="watchdog_reset_counter" id="watchdog_reset_counter" min="0" max="4294967295" required>
+                <div style="font-size: 0.8em; color: #666; margin-top: 0.3em;">
+                    Counter increments each time the watchdog timeout occurs
+                </div>
+            </label>
+            <button type="submit">Save & Reboot</button>
+        </form>
+        
+        <!-- OTA Update Section -->
+        <div style="margin-top: 2em; padding-top: 2em; border-top: 2px solid #e0e0e0;">
+            <h3 style="color: var(--primary); margin-bottom: 1em;">Over-The-Air Updates</h3>
+            
+            <div style="margin-bottom: 1.5em;">
+                <label for="firmware_file">Firmware Update (.bin file):</label>
+                <input type="file" id="firmware_file" accept=".bin" style="margin-top: 0.5em; width: 100%;">
+                <button type="button" id="upload_firmware" style="margin-top: 0.5em; background: #ff9800;">Upload Firmware</button>
+            </div>
+            
+            <div style="margin-bottom: 1.5em;">
+                <label for="filesystem_file">Filesystem Update (spiffs.bin file):</label>
+                <input type="file" id="filesystem_file" accept=".bin" style="margin-top: 0.5em; width: 100%;">
+                <button type="button" id="upload_filesystem" style="margin-top: 0.5em; background: #ff9800;">Upload Filesystem</button>
+            </div>
+            
+            <div id="ota_progress" style="display: none; margin-top: 1em;">
+                <div style="background: #f0f0f0; border-radius: 8px; overflow: hidden;">
+                    <div id="progress_bar" style="height: 20px; background: var(--primary); width: 0%; transition: width 0.3s;"></div>
+                </div>
+                <div id="progress_text" style="text-align: center; margin-top: 0.5em;">0%</div>
+            </div>
+        </div>
+        
+        <div id="msg"></div>
+    </div>
+    <script>
+
+    // Wait for DOM to be ready
+    document.addEventListener('DOMContentLoaded', function() {
+        loadSystemInfo();
+        loadConfiguration();
+    });
+
+    // Load system info
+    function loadSystemInfo() {
+        fetch('/sysinfo.json').then(r => {
+            if (!r.ok) {
+                throw new Error('HTTP ' + r.status);
+            }
+            return r.json();
+        }).then(info => {
+            document.getElementById('sysinfo_version').textContent = info.version || 'N/A';
+            document.getElementById('sysinfo_build').textContent = info.build || 'N/A';
+            document.getElementById('sysinfo_sdk').textContent = info.sdk || 'N/A';
+            document.getElementById('sysinfo_restart').textContent = info.restart_reason || 'N/A';
+            document.getElementById('sysinfo_chipid').textContent = info.chip_id || 'N/A';
+            document.getElementById('sysinfo_flashid').textContent = info.flash_id || 'N/A';
+            document.getElementById('sysinfo_flashsize').textContent = info.flash_size || 'N/A';
+        }).catch(err => {
+            document.getElementById('sysinfo_version').textContent = 'Error loading system info';
+        });
+    }
+    
+    // Load configuration
+    function loadConfiguration() {
+        fetch('/params.json').then(r => r.json()).then(cfg => {
+            // Populate all form fields
+            document.getElementById('ssid').value = cfg.ssid || '';
+            document.getElementById('password').value = cfg.password || '';
+            document.getElementById('mqtt_url').value = cfg.mqtt_url || '';
+            document.getElementById('sample_interval').value = cfg.sample_interval || 5000;
+            document.getElementById('data_topic').value = cfg.data_topic || 'sensors/light/data';
+            document.getElementById('watchdog_reset_counter').value = cfg.watchdog_reset_counter || 0;
+        }).catch(err => {
+            console.log('Error fetching params.json: ' + err.message);
+        });
+    }
+
+    // Handle form submit via AJAX
+    document.getElementById('paramsForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        const form = e.target;
+        
+        // Get SSID from text input
+        const ssidValue = document.getElementById('ssid').value;
+        
+        if (!ssidValue || ssidValue.trim() === '') {
+            document.getElementById('msg').textContent = 'Please enter a WiFi SSID';
+            document.getElementById('msg').style.color = 'red';
+            return;
+        }
+        
+        const formData = new FormData(form);
+        const data = new URLSearchParams(formData).toString();
+        
+        fetch('/update', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: data
+        }).then(r => {
+            if (r.ok) {
+                document.getElementById('msg').textContent = 'Saved! Rebooting...';
+                document.getElementById('msg').style.color = 'green';
+                setTimeout(() => location.reload(), 4000);
+            } else {
+                document.getElementById('msg').textContent = 'Error saving!';
+                document.getElementById('msg').style.color = 'red';
+            }
+        }).catch(() => {
+            document.getElementById('msg').textContent = 'Network error!';
+            document.getElementById('msg').style.color = 'red';
+        });
+    });
+
+    // Custom confirmation dialog for iPad compatibility
+    function showCustomConfirmation(message, callback) {
+        
+        // Create modal overlay
+        const overlay = document.createElement('div');
+        overlay.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            font-family: 'Segoe UI', Arial, sans-serif;
+        `;
+        
+        // Create dialog box
+        const dialog = document.createElement('div');
+        dialog.style.cssText = `
+            background: white;
+            padding: 2em;
+            border-radius: 12px;
+            max-width: 400px;
+            width: 90%;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+            text-align: center;
+        `;
+        
+        // Add message
+        const messageDiv = document.createElement('div');
+        messageDiv.textContent = message;
+        messageDiv.style.cssText = `
+            margin-bottom: 1.5em;
+            font-size: 1.1em;
+            line-height: 1.4;
+            color: #333;
+        `;
+        
+        // Add buttons container
+        const buttonsDiv = document.createElement('div');
+        buttonsDiv.style.cssText = `
+            display: flex;
+            gap: 1em;
+            justify-content: center;
+        `;
+        
+        // Cancel button
+        const cancelBtn = document.createElement('button');
+        cancelBtn.textContent = 'Cancel';
+        cancelBtn.style.cssText = `
+            padding: 0.8em 1.5em;
+            background: #6c757d;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 1em;
+        `;
+        
+        // Continue button
+        const continueBtn = document.createElement('button');
+        continueBtn.textContent = 'Continue';
+        continueBtn.style.cssText = `
+            padding: 0.8em 1.5em;
+            background: #dc3545;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 1em;
+        `;
+        
+        // Event handlers
+        cancelBtn.onclick = function() {
+            document.body.removeChild(overlay);
+            callback(false);
+        };
+        
+        continueBtn.onclick = function() {
+            document.body.removeChild(overlay);
+            callback(true);
+        };
+        
+        // Assemble dialog
+        buttonsDiv.appendChild(cancelBtn);
+        buttonsDiv.appendChild(continueBtn);
+        dialog.appendChild(messageDiv);
+        dialog.appendChild(buttonsDiv);
+        overlay.appendChild(dialog);
+        
+        // Show dialog
+        document.body.appendChild(overlay);
+        
+        // Focus the continue button for accessibility
+        continueBtn.focus();
+    }
+
+    // OTA Upload Functions
+    function uploadFile(file, endpoint, progressCallback) {
+        return new Promise((resolve, reject) => {
+            const xhr = new XMLHttpRequest();
+            let uploadComplete = false;
+            let lastProgressTime = Date.now();
+            
+            // Set up a completion timeout - if we reach 100% but don't get a response
+            let completionTimeout;
+            
+            xhr.upload.addEventListener('progress', function(e) {
+                lastProgressTime = Date.now();
+                
+                if (e.lengthComputable) {
+                    const percentComplete = (e.loaded / e.total) * 100;
+                    progressCallback(percentComplete);
+                    
+                    // If we reach 100%, start a completion timer
+                    if (percentComplete >= 100 && !uploadComplete) {
+                        completionTimeout = setTimeout(function() {
+                            uploadComplete = true;
+                            resolve('Upload completed - server rebooting');
+                        }, 5000); // Wait 5 seconds for server response
+                    }
+                }
+            });
+            
+            xhr.addEventListener('load', function() {
+                if (completionTimeout) {
+                    clearTimeout(completionTimeout);
+                }
+                uploadComplete = true;
+                
+                if (xhr.status === 200 || xhr.status === 0) { // Accept status 0 for cases where connection drops after success
+                    resolve(xhr.responseText || 'Upload completed successfully');
+                } else {
+                    reject(new Error('Upload failed: HTTP ' + xhr.status + ' - ' + xhr.statusText + (xhr.responseText ? ' - ' + xhr.responseText : '')));
+                }
+            });
+            
+            xhr.addEventListener('error', function() {
+                if (completionTimeout) {
+                    clearTimeout(completionTimeout);
+                }
+                if (!uploadComplete) {
+                    reject(new Error('Network error during upload'));
+                }
+            });
+            
+            xhr.addEventListener('timeout', function() {
+                if (completionTimeout) {
+                    clearTimeout(completionTimeout);
+                }
+                reject(new Error('Upload timeout'));
+            });
+            
+            xhr.addEventListener('loadend', function() {
+                if (completionTimeout) {
+                    clearTimeout(completionTimeout);
+                }
+            });
+            
+            // Set up a stall detection timer
+            const stallTimeout = setInterval(function() {
+                const timeSinceProgress = Date.now() - lastProgressTime;
+                if (timeSinceProgress > 30000 && !uploadComplete) { // 30 seconds without progress
+                    clearInterval(stallTimeout);
+                    if (completionTimeout) {
+                        clearTimeout(completionTimeout);
+                    }
+                    reject(new Error('Upload stalled - no progress for ' + Math.round(timeSinceProgress/1000) + ' seconds'));
+                }
+            }, 5000);
+            
+            // Clean up stall timer on completion
+            const originalResolve = resolve;
+            const originalReject = reject;
+            resolve = function(value) {
+                clearInterval(stallTimeout);
+                originalResolve(value);
+            };
+            reject = function(error) {
+                clearInterval(stallTimeout);
+                originalReject(error);
+            };
+            
+            xhr.open('POST', endpoint);
+            xhr.timeout = 300000; // 5 minutes timeout
+            xhr.send(file);
+        });
+    }
+
+    function showProgress(show) {
+        const progressDiv = document.getElementById('ota_progress');
+        const progressBar = document.getElementById('progress_bar');
+        const progressText = document.getElementById('progress_text');
+        
+        if (show) {
+            progressDiv.style.display = 'block';
+            progressBar.style.width = '0%';
+            progressText.textContent = '0%';
+        } else {
+            progressDiv.style.display = 'none';
+        }
+    }
+
+    function updateProgress(percent) {
+        const progressBar = document.getElementById('progress_bar');
+        const progressText = document.getElementById('progress_text');
+        
+        progressBar.style.width = percent + '%';
+        progressText.textContent = Math.round(percent) + '%';
+    }
+
+    // Firmware upload handler
+    document.getElementById('upload_firmware').addEventListener('click', function() {
+        const fileInput = document.getElementById('firmware_file');
+        const file = fileInput.files[0];
+        
+        if (!file) {
+            document.getElementById('msg').textContent = 'Please select a firmware file (.bin)';
+            document.getElementById('msg').style.color = 'red';
+            return;
+        }
+        
+        if (!file.name.endsWith('.bin')) {
+            document.getElementById('msg').textContent = 'Please select a valid .bin file';
+            document.getElementById('msg').style.color = 'red';
+            return;
+        }
+        
+        // Use custom confirmation dialog for iPad compatibility
+        showCustomConfirmation('This will update the firmware and reboot the device. Continue?', function(confirmed) {
+            if (confirmed) {
+                showProgress(true);
+                document.getElementById('msg').textContent = 'Uploading firmware...';
+                document.getElementById('msg').style.color = 'blue';
+                
+                uploadFile(file, '/ota/firmware', updateProgress)
+                    .then(response => {
+                        document.getElementById('msg').textContent = 'Firmware update successful! Device rebooting...';
+                        document.getElementById('msg').style.color = 'green';
+                        showProgress(false);
+                        setTimeout(() => {
+                            location.reload();
+                        }, 5000);
+                    })
+                    .catch(error => {
+                        document.getElementById('msg').textContent = 'Firmware update failed: ' + error.message;
+                        document.getElementById('msg').style.color = 'red';
+                        showProgress(false);
+                    });
+            }
+        });
+    });
+
+    // Filesystem upload handler
+    document.getElementById('upload_filesystem').addEventListener('click', function() {
+        const fileInput = document.getElementById('filesystem_file');
+        const file = fileInput.files[0];
+        
+        if (!file) {
+            document.getElementById('msg').textContent = 'Please select a filesystem file (spiffs.bin)';
+            document.getElementById('msg').style.color = 'red';
+            return;
+        }
+        
+        if (!file.name.includes('spiffs') || !file.name.endsWith('.bin')) {
+            document.getElementById('msg').textContent = 'Please select a valid spiffs.bin file';
+            document.getElementById('msg').style.color = 'red';
+            return;
+        }
+        
+        // Use custom confirmation dialog for iPad compatibility
+        showCustomConfirmation('This will update the filesystem and reboot the device. Continue?', function(confirmed) {
+            if (confirmed) {
+                showProgress(true);
+                document.getElementById('msg').textContent = 'Uploading filesystem...';
+                document.getElementById('msg').style.color = 'blue';
+                
+                uploadFile(file, '/ota/filesystem', updateProgress)
+                    .then(response => {
+                        document.getElementById('msg').textContent = 'Filesystem update successful! Device rebooting...';
+                        document.getElementById('msg').style.color = 'green';
+                        showProgress(false);
+                        setTimeout(() => {
+                            location.reload();
+                        }, 5000);
+                    })
+                    .catch(error => {
+                        document.getElementById('msg').textContent = 'Filesystem update failed: ' + error.message;
+                        document.getElementById('msg').style.color = 'red';
+                        showProgress(false);
+                    });
+            }
+        });
+    });
+    </script>
+</body>
+</html>

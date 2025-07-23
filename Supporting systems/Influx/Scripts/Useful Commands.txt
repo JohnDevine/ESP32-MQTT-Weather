@@ -1,0 +1,58 @@
+FOR INFLUX V 1.8
+
+docker exec -it influxdb influx
+
+SHOW DATABASES
+DROP DATABASE BMS
+CREATE DATABASE BMS
+CREATE RETENTION POLICY "one_week" ON "BMS" DURATION 7d REPLICATION 1 DEFAULT
+SHOW RETENTION POLICIES ON BMS
+
+USE BMS
+
+SHOW MEASUREMENTS
+DROP MEASUREMENT "BMS"
+SHOW MEASUREMENTS FROM "autogen"./.*/  -- list from autogen
+
+SELECT * FROM "BMS" LIMIT 2
+
+
+SHOW TAG KEYS FROM "BMS"
+SHOW TAG VALUES FROM "BMS" WITH KEY = "pack_Naming_of_factory_ID"
+
+============================
+
+FOR INFLUX V 2
+
+There is a web interface on http://192.168.1.5:8087
+The default user/password is me/mypassword
+It was setup in the docker-compose.yml in IOTstack 
+
+First get a command line within the container
+docker exec -it influxdb2 /bin/bash
+
+Need an organisation under V2
+influx org create --name solarblue
+
+To create a bucket (bucket=database) with 1 year retention in organisation solarblue
+influx bucket create -n BMS -r 8760h -o solarblue
+
+To list buckets
+influx bucket list --org solarblue
+
+To drop/delete a bucket you need
+influx bucket delete --name BMS --org solarblue
+
+When setting up node the in nodered palette server it will request a authorisation “Token:”. You get the ID here. Copy the token it spits out.
+This grants access to all current and future buckets in that organization.
+
+influx auth create \
+  --org solarblue \
+  --all-access \
+  --description "Full access token for all buckets in solarblue"
+
+You can also list the tokens and grab the one you want .. not Token NOT ID
+influx auth list --org solarblue
+
+-11A0uaVI42oL3AUX-pR6fLE5D17WxlFXdeRSLxdwk5i0MvcQ9q7EwNPkHZ4a4JpF eyivQ==
+

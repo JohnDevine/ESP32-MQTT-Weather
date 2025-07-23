@@ -1,0 +1,121 @@
+[
+    {
+        "id": "1e11ba231d2a565a",
+        "type": "tab",
+        "label": "Flow 1",
+        "disabled": false,
+        "info": "",
+        "env": []
+    },
+    {
+        "id": "79076cf9a50d2158",
+        "type": "tab",
+        "label": "BMS2Influx",
+        "disabled": false,
+        "info": "",
+        "env": []
+    },
+    {
+        "id": "4e9759aa5d998d78",
+        "type": "mqtt-broker",
+        "name": "MQTT on local Server",
+        "broker": "mqtt://mosquitto:1883",
+        "port": "1883",
+        "clientid": "",
+        "autoConnect": true,
+        "usetls": false,
+        "protocolVersion": "4",
+        "keepalive": "60",
+        "cleansession": true,
+        "autoUnsubscribe": true,
+        "birthTopic": "",
+        "birthQos": "0",
+        "birthRetain": "false",
+        "birthPayload": "",
+        "birthMsg": {},
+        "closeTopic": "",
+        "closeQos": "0",
+        "closeRetain": "false",
+        "closePayload": "",
+        "closeMsg": {},
+        "willTopic": "",
+        "willQos": "0",
+        "willRetain": "false",
+        "willPayload": "",
+        "willMsg": {},
+        "userProps": "",
+        "sessionExpiry": ""
+    },
+    {
+        "id": "2ed0bc98bcc324f8",
+        "type": "influxdb",
+        "hostname": "influx",
+        "port": 8086,
+        "protocol": "http",
+        "database": "BMS",
+        "name": "BMS database",
+        "usetls": false,
+        "tls": "",
+        "influxdbVersion": "1.x",
+        "url": "http://localhost:8086",
+        "timeout": 10,
+        "rejectUnauthorized": true
+    },
+    {
+        "id": "c50fe9abe4eb6063",
+        "type": "mqtt in",
+        "z": "79076cf9a50d2158",
+        "name": "Bank 1 pack Info",
+        "topic": "BMS/JKBMS",
+        "qos": "2",
+        "datatype": "json",
+        "broker": "4e9759aa5d998d78",
+        "nl": false,
+        "rap": true,
+        "rh": 0,
+        "inputs": 0,
+        "x": 140,
+        "y": 180,
+        "wires": [
+            [
+                "60dcf62474542643"
+            ]
+        ]
+    },
+    {
+        "id": "60dcf62474542643",
+        "type": "function",
+        "z": "79076cf9a50d2158",
+        "name": "Setup pack data for Influx",
+        "func": "function flatten(obj, prefix = '', res = {}) {\n    for (const key in obj) {\n        const val = obj[key];\n        const newKey = prefix ? `${prefix}_${key}` : key;\n        if (typeof val === 'object' && val !== null && !Array.isArray(val)) {\n            flatten(val, newKey, res);\n        } else {\n            res[newKey] = val;\n        }\n    }\n    return res;\n}\n\nconst flat = flatten(msg.payload);\n\n// Extract tag value and remove it from fields\nconst factoryID = flat[\"pack_Naming_of_factory_ID\"] || \"unknown\";\ndelete flat[\"pack_Naming_of_factory_ID\"];\n\n// Final payload: [fields, tags]\nmsg.payload = [\n    flat,\n    {\n        pack_Naming_of_factory_ID: factoryID\n    }\n];\n\nmsg.measurement = \"BMS\";\nreturn msg;",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 450,
+        "y": 180,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "f5758cf2ab98606b",
+        "type": "influxdb out",
+        "z": "79076cf9a50d2158",
+        "influxdb": "2ed0bc98bcc324f8",
+        "name": "Write to Influx measurement BMS",
+        "measurement": "BMS",
+        "precision": "",
+        "retentionPolicy": "one_week",
+        "database": "influxdb",
+        "precisionV18FluxV20": "ms",
+        "retentionPolicyV18Flux": "",
+        "org": "organisation",
+        "bucket": "bucket",
+        "x": 840,
+        "y": 180,
+        "wires": []
+    }
+]
