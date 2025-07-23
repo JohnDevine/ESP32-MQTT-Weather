@@ -1,20 +1,34 @@
-# ESP32 MQTT Sensor Template
+# ESP32-MQTT-WEATHER Configurable Sensor System
 
 ## Overview
-This is an ESP32-based template project for creating IoT sensor monitoring systems. It provides a complete foundation for collecting sensor data and publishing it to MQTT. The template includes web-based configuration, over-the-air updates, and robust connectivity with automatic recovery features.
+This is an ESP32-based configurable sensor monitoring system for IoT applications. It provides a complete foundation for collecting data from multiple sensors and publishing it to MQTT. The system includes web-based configuration, over-the-air updates, and robust connectivity with automatic recovery features.
 
-**Note**: This is a template project that can be customized for various sensors such as BH1750 (light), BME680 (environmental), temperature sensors, and more. Use this as a starting point for your own ESP32 IoT projects with sensor data collection and MQTT publishing capabilities.
+**Key Feature**: Runtime configurable sensors! Enable/disable individual sensors through the web interface without code changes. Currently supports BH1750 light sensor with framework ready for BME680 and other sensors.
 
 ## Features
-- **Configurable Sensor Support**: Template structure for I2C, SPI, GPIO, or UART sensors
+- **Configurable Sensor Support**: Runtime enable/disable of individual sensors through web interface
+- **Multiple Sensor Types**: BH1750 light sensor (implemented), BME680 environmental (framework ready)
+- **Individual MQTT Topics**: Each sensor publishes to its own configurable topic
 - **MQTT Publishing**: Automatic data publishing with configurable intervals
-- **Web Configuration**: Captive portal for easy WiFi and MQTT setup
+- **Web Configuration**: Captive portal for easy WiFi, MQTT, and sensor setup
 - **Over-the-Air Updates**: Remote firmware and file system updates
 - **System Monitoring**: WiFi signal strength, CPU temperature, and system metrics
 - **Watchdog Protection**: Automatic recovery from system failures
 - **Persistent Configuration**: Settings stored in ESP32 NVS (Non-Volatile Storage)
 
-## Template Customization Points
+## Customization and Extension Points
+**NEW**: This project now includes a configurable sensor system! See [SENSOR_CONFIGURATION.md](SENSOR_CONFIGURATION.md) for detailed documentation.
+
+### Quick Start with BH1750
+The BH1750 light sensor is fully implemented and ready to use:
+1. Connect BH1750 to ESP32 (VCC->3.3V, GND->GND, SDA->GPIO21, SCL->GPIO22)
+2. Flash the firmware and enter configuration mode (hold boot button during power-on)
+3. Enable BH1750 sensor in the web interface
+4. Configure MQTT topic (default: `sensors/light/bh1750`)
+5. Save and reboot - sensor data will be published automatically
+
+### Adding More Sensors
+The framework supports easy addition of new sensors. BME680 framework is ready for implementation.
 Search for "TEMPLATE:" comments in the source code to find areas that need customization:
 - **Sensor Configuration**: Pin assignments and communication protocol setup
 - **Data Structure**: Define your sensor-specific data fields
@@ -23,13 +37,28 @@ Search for "TEMPLATE:" comments in the source code to find areas that need custo
 - **JSON Output**: Customize the MQTT data format
 
 ## Supported Sensor Examples
-This template can be easily adapted for:
-- **BH1750**: Light sensor (I2C) - included as example
-- **BME680**: Environmental sensor (I2C/SPI) - temperature, humidity, pressure, gas
+This project includes a configurable sensor system with runtime enable/disable:
+
+### Currently Implemented
+- **BH1750**: Light sensor (I2C) - fully implemented and ready to use
+  - Default topic: `sensors/light/bh1750`  
+  - Data: Light intensity in lux
+  - Configuration: Enable/disable via web interface
+
+### Framework Ready (Implementation Needed)
+- **BME680**: Environmental sensor (I2C/SPI) - stub implementation provided
+  - Temperature, humidity, pressure, gas resistance
+  - Default topic: `sensors/environment/bme680`
+
+### Easily Adaptable For
 - **DHT22**: Temperature and humidity sensor (GPIO)
 - **DS18B20**: Temperature sensor (1-Wire)
 - **MQ sensors**: Gas sensors (ADC)
 - **Analog sensors**: Using ESP32's ADC
+- **BME280**: Temperature, humidity, pressure (I2C/SPI)
+- **SHT30**: Temperature and humidity (I2C)
+
+See [SENSOR_CONFIGURATION.md](SENSOR_CONFIGURATION.md) for detailed sensor addition instructions.
 
 ## Hardware Components
 - **ESP32 Development Board** (tested with ESP32 DevKit V1)
@@ -49,9 +78,9 @@ This template can be easily adapted for:
 
 ## MQTT Data Structure
 
-The ESP32 publishes sensor data in JSON format to the configured MQTT topic. The message includes both system metrics and your custom sensor readings.
+The ESP32 publishes sensor data in JSON format to the configured MQTT topic. The message includes both system metrics and data from all enabled sensors in a single combined message.
 
-### Data Message Format
+### Combined Data Message Format
 ```json
 {
   // ESP32 processor metrics
@@ -64,11 +93,24 @@ The ESP32 publishes sensor data in JSON format to the configured MQTT topic. The
     "WDTRestartCount": 2               // Watchdog restart counter
   },
   
-  // Sensor data (customize for your sensors)
-  "data": {
-    "sensor_value_1": 1250.5,         // Primary sensor reading (customize)
-    "sensor_value_2": 25.3,           // Secondary sensor reading (optional)
-    "sensor_ok": true                  // Sensor status (true = successful read)
+  // All enabled sensor data
+  "sensors": {
+    "bh1750": {                        // BH1750 light sensor (if enabled)
+      "name": "BH1750 Light Sensor",
+      "valid": true,
+      "timestamp": 12345,
+      "lux": 1250.5
+    },
+    "bme680": {                        // BME680 environmental sensor (if enabled)
+      "name": "BME680 Environmental",
+      "valid": true,
+      "timestamp": 12345,
+      "temperature": 25.2,
+      "humidity": 65.5,
+      "pressure": 1013.25,
+      "gas_resistance": 50000
+    }
+    // Additional sensors will be added here as they are enabled
   }
 }
 ```
@@ -83,14 +125,17 @@ The ESP32 publishes sensor data in JSON format to the configured MQTT topic. The
 - **ChipID**: Unique ESP32 chip identifier (MAC-based)
 - **WDTRestartCount**: Number of watchdog-triggered restarts (reliability metric)
 
-#### Sensor Data (Customize for Your Sensors)
-- **sensor_value_1**: Primary sensor reading (customize data type and units)
-- **sensor_value_2**: Secondary sensor reading (optional, remove if not needed)
-- **sensor_ok**: Boolean indicating successful sensor reading
+#### Sensor Data (Configurable)
+Each enabled sensor appears as a separate object within the "sensors" section:
+- **name**: Human-readable sensor name
+- **valid**: Boolean indicating successful sensor reading
+- **timestamp**: Timestamp of the reading in milliseconds
+- **sensor-specific fields**: Data fields specific to each sensor type
 
 ### Data Publishing Behavior
-- **Successful Reading**: MQTT message published with current sensor data
+- **Successful Reading**: MQTT message published with current data from all enabled sensors
 - **Failed Reading**: No MQTT message published (prevents invalid data)
+- **Partial Success**: Message published with data from successfully read sensors only
 - **Watchdog Protection**: ESP32 resets if no successful MQTT publish within timeout period
 ## Configuration and Setup
 
@@ -120,7 +165,7 @@ The ESP32 publishes sensor data in JSON format to the configured MQTT topic. The
 - **Reset Options**: Factory reset or watchdog counter reset
 
 ## Applications and Use Cases
-This template can be adapted for various IoT monitoring applications:
+This configurable sensor system can be adapted for various IoT monitoring applications:
 - **Environmental Monitoring**: Temperature, humidity, air quality sensors
 - **Smart Home**: Light, motion, door/window sensors  
 - **Industrial IoT**: Pressure, vibration, current sensors
@@ -134,33 +179,57 @@ This template can be adapted for various IoT monitoring applications:
 
 ### Home Assistant Integration
 ```yaml
-# configuration.yaml - Customize for your sensor data
+# configuration.yaml - Updated for combined sensor data format
 sensor:
+  # BH1750 Light Sensor
   - platform: mqtt
-    name: "ESP32 Sensor Reading"
+    name: "ESP32 Light Level"
     state_topic: "sensors/data"
-    value_template: "{{ value_json.data.sensor_value_1 }}"
-    unit_of_measurement: "units"  # Customize units for your sensor
+    value_template: "{{ value_json.sensors.bh1750.lux if value_json.sensors.bh1750 else 'unavailable' }}"
+    unit_of_measurement: "lx"
+    availability_template: "{{ 'online' if value_json.sensors.bh1750.valid else 'offline' }}"
     
+  # BME680 Environmental Sensor (when implemented)
+  - platform: mqtt
+    name: "ESP32 Temperature"
+    state_topic: "sensors/data"
+    value_template: "{{ value_json.sensors.bme680.temperature if value_json.sensors.bme680 else 'unavailable' }}"
+    unit_of_measurement: "°C"
+    
+  - platform: mqtt
+    name: "ESP32 Humidity"
+    state_topic: "sensors/data"
+    value_template: "{{ value_json.sensors.bme680.humidity if value_json.sensors.bme680 else 'unavailable' }}"
+    unit_of_measurement: "%"
+    
+  # System Information
   - platform: mqtt
     name: "ESP32 WiFi Signal"
     state_topic: "sensors/data"
     value_template: "{{ value_json.processor.WiFiRSSI }}"
     unit_of_measurement: "%"
     
-binary_sensor:
   - platform: mqtt
-    name: "ESP32 Sensor Status"
+    name: "ESP32 IP Address"
     state_topic: "sensors/data"
-    value_template: "{{ value_json.data.sensor_ok }}"
-    payload_on: true
-    payload_off: false
+    value_template: "{{ value_json.processor.IPAddress }}"
+    
+binary_sensor:
+  # Overall sensor status
+  - platform: mqtt
+    name: "ESP32 Online"
+    state_topic: "sensors/data"
+    value_template: "{{ 'ON' if value_json.processor else 'OFF' }}"
+    payload_on: "ON"
+    payload_off: "OFF"
 ```
 
 ### InfluxDB Line Protocol
 ```influxdb
-# Customize for your sensor data
-sensor_data,device=ESP32-Sensor,location=room sensor_value_1=1250.5,wifi_rssi=75,sensor_ok=1 1642234567890000000
+# Combined sensor data - parse JSON and create multiple measurements
+sensor_data,device=ESP32-Sensor,sensor=bh1750 lux=1250.5,valid=1 1642234567890000000
+sensor_data,device=ESP32-Sensor,sensor=bme680 temperature=25.2,humidity=65.5,pressure=1013.25,gas_resistance=50000,valid=1 1642234567890000000
+system_data,device=ESP32-Sensor wifi_rssi=75,cpu_temp=32.0,wdt_restarts=2 1642234567890000000
 ```
 
 ### Node-RED Flow Example

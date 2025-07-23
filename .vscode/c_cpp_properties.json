@@ -8,12 +8,12 @@
         {
             "name": "PlatformIO",
             "includePath": [
-                "/Volumes/Work01/Developer/ESP32Projects/ESP32-MQTT-Template/include",
-                "/Volumes/Work01/Developer/ESP32Projects/ESP32-MQTT-Template/src",
+                "/Volumes/Work01/Developer/ESP32Projects/ESP32-MQTT-Weather/include",
+                "/Volumes/Work01/Developer/ESP32Projects/ESP32-MQTT-Weather/src",
                 "/Users/johndevine/.platformio/packages/framework-espidf/components/xtensa/esp32/include",
                 "/Users/johndevine/.platformio/packages/framework-espidf/components/xtensa/include",
                 "/Users/johndevine/.platformio/packages/framework-espidf/components/xtensa/deprecated_include",
-                "/Volumes/Work01/Developer/ESP32Projects/ESP32-MQTT-Template/.pio/build/esp32doit-devkit-v1/config",
+                "/Volumes/Work01/Developer/ESP32Projects/ESP32-MQTT-Weather/.pio/build/esp32doit-devkit-v1/config",
                 "/Users/johndevine/.platformio/packages/framework-espidf/components/newlib/platform_include",
                 "/Users/johndevine/.platformio/packages/framework-espidf/components/freertos/config/include",
                 "/Users/johndevine/.platformio/packages/framework-espidf/components/freertos/config/include/freertos",
@@ -175,12 +175,12 @@
             "browse": {
                 "limitSymbolsToIncludedHeaders": true,
                 "path": [
-                    "/Volumes/Work01/Developer/ESP32Projects/ESP32-MQTT-Template/include",
-                    "/Volumes/Work01/Developer/ESP32Projects/ESP32-MQTT-Template/src",
+                    "/Volumes/Work01/Developer/ESP32Projects/ESP32-MQTT-Weather/include",
+                    "/Volumes/Work01/Developer/ESP32Projects/ESP32-MQTT-Weather/src",
                     "/Users/johndevine/.platformio/packages/framework-espidf/components/xtensa/esp32/include",
                     "/Users/johndevine/.platformio/packages/framework-espidf/components/xtensa/include",
                     "/Users/johndevine/.platformio/packages/framework-espidf/components/xtensa/deprecated_include",
-                    "/Volumes/Work01/Developer/ESP32Projects/ESP32-MQTT-Template/.pio/build/esp32doit-devkit-v1/config",
+                    "/Volumes/Work01/Developer/ESP32Projects/ESP32-MQTT-Weather/.pio/build/esp32doit-devkit-v1/config",
                     "/Users/johndevine/.platformio/packages/framework-espidf/components/newlib/platform_include",
                     "/Users/johndevine/.platformio/packages/framework-espidf/components/freertos/config/include",
                     "/Users/johndevine/.platformio/packages/framework-espidf/components/freertos/config/include/freertos",

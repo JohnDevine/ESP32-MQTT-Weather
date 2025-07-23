@@ -1,11 +1,12 @@
 /*
- * ESP32 MQTT Sensor Template
+ * ESP32-MQTT-WEATHER Configurable Sensor System
  * 
  * This project implements an ESP32-based sensor monitoring system that reads
- * data from various sensors and publishes the measurements to an MQTT broker.
+ * data from configurable sensors and publishes the measurements to an MQTT broker.
  * 
  * FEATURES:
- * - Configurable sensor reading (I2C, SPI, GPIO, or other protocols)
+ * - Runtime configurable sensor enable/disable through web interface
+ * - Multiple sensor support with individual MQTT topics
  * - MQTT connectivity with automatic reconnection handling
  * - WiFi configuration with captive portal for easy setup
  * - Web-based configuration interface for all parameters
@@ -15,12 +16,12 @@
  * 
  * HARDWARE REQUIREMENTS:
  * - ESP32 development board
- * - Sensor(s) of your choice (configure protocol and pins as needed)
+ * - Supported sensors: BH1750 (light), BME680 (environmental), etc.
  * - Pull-up resistors for I2C lines if using I2C (typically 4.7kΩ)
  * 
  * DATA OUTPUT:
- * - Configurable sensor data (modify data structure as needed)
- * - Sensor status and processor metrics
+ * - Combined JSON message with processor metrics and all enabled sensor data
+ * - Individual sensor enable/disable configuration
  * - JSON format via MQTT for integration with home automation systems
  * 
  * CUSTOMIZATION POINTS:
@@ -68,6 +69,9 @@
 #include "esp_log.h"
 // Standard C string manipulation library (for memcmp)
 #include <string.h> 
+
+// Sensor configuration system
+#include "sensor_config.h"
 
 // Added for Wi-Fi and MQTT
 #include "esp_wifi.h"
@@ -135,24 +139,8 @@ static uint32_t watchdog_reset_counter = 0;  // Watchdog timer reset counter
 
 #define BOOT_BTN_GPIO GPIO_NUM_0
 
-// TEMPLATE: Configure your sensor communication pins and settings here
-// Example I2C configuration (remove if not using I2C)
-#define I2C_MASTER_SCL_IO           GPIO_NUM_22    // SCL GPIO pin
-#define I2C_MASTER_SDA_IO           GPIO_NUM_21    // SDA GPIO pin
-#define I2C_MASTER_FREQ_HZ          100000         // I2C master clock frequency (100kHz)
-#define I2C_MASTER_TIMEOUT_MS       1000
-
-// TEMPLATE: Replace with your sensor's I2C address and commands (remove if not using I2C)
-// Example sensor configuration
-#define SENSOR_I2C_ADDR             0x23           // Replace with your sensor's I2C address
-#define SENSOR_CMD_INIT             0x01           // Replace with initialization command
-#define SENSOR_CMD_READ             0x10           // Replace with read command
-// Add more sensor-specific commands as needed
-
-// TEMPLATE: Configure communication handles (modify based on your sensor type)
-// I2C handles (remove if not using I2C)
-static i2c_master_bus_handle_t i2c_bus_handle;
-static i2c_master_dev_handle_t sensor_dev_handle;
+// Note: I2C configuration is now handled by the sensor modules in the sensor_config system
+// The original template I2C defines have been removed since we use the configurable sensor system
 
 // Tag used for logging messages from this module
 static const char *TAG = "DATA_READER";
@@ -166,30 +154,6 @@ static const char *TAG = "DATA_READER";
 // Global variable for MQTT client
 static esp_mqtt_client_handle_t mqtt_client;
 static int wifi_retry_num = 0;
-
-// TEMPLATE: Define your sensor data structure here
-// Replace this with your specific sensor data fields
-typedef struct {
-    // TEMPLATE: Add your sensor-specific data fields here
-    // Examples:
-    // float temperature;    // Temperature in Celsius
-    // float humidity;       // Relative humidity percentage
-    // float pressure;       // Atmospheric pressure in hPa
-    // int32_t light_level;  // Light intensity in lux
-    // bool sensor_1_ok;     // First sensor status
-    // bool sensor_2_ok;     // Second sensor status
-    
-    // Example fields (customize for your sensors):
-    float sensor_value_1;    // Primary sensor reading
-    float sensor_value_2;    // Secondary sensor reading (optional)
-    bool sensor_ok;          // Overall sensor status flag
-    
-    // Add more fields as needed for your specific sensors
-} sensor_data_t;
-
-// Global instance of sensor data
-static sensor_data_t current_sensor_data;
-
 
 // PutInputCodeHere: Define your protocol-specific data structures here
 // Example: If you need to store parsed fields from your input data
@@ -208,6 +172,13 @@ static sensor_data_t current_sensor_data;
 // Forward declarations for NVS functions
 static void load_watchdog_counter_from_nvs(void);
 static void save_watchdog_counter_to_nvs(void);
+
+// Forward declarations for system info functions
+static int32_t get_wifi_rssi_percent(void);
+static char* get_ip_address(void);
+static float get_cpu_temperature(void);
+static char* get_software_version(void);
+static char* get_chip_id(void);
 
 // Forward declaration for DNS hijack task
 void dns_hijack_task(void *pvParameter);
@@ -232,7 +203,8 @@ static bool test_mqtt_broker_connectivity(const char* broker_url);
 static bool check_wifi_connection(void);
 void wifi_init_sta(void);
 static void mqtt_app_start(void);
-void publish_sensor_data_mqtt(const sensor_data_t *sensor_data_ptr); // Publish sensor data to MQTT
+void publish_sensor_data_mqtt(const char* topic, const char* json_data); // Legacy function (kept for compatibility)
+void publish_combined_sensor_mqtt(const char* topic, const char* json_data); // Publish combined sensor data to main topic
 
 // Forward declaration for DNS hijack task
 void dns_hijack_task(void *pvParameter);
@@ -257,131 +229,157 @@ uint8_t unpack_u8(const uint8_t *buffer, int offset) {
     return buffer[offset];
 }
 
-// TEMPLATE: I2C Master initialization (modify for your sensor communication protocol)
-// Remove this entire function if not using I2C
-static esp_err_t init_i2c_master(void) {
-    // Configure I2C master bus
-    i2c_master_bus_config_t i2c_bus_config = {
-        .clk_source = I2C_CLK_SRC_DEFAULT,
-        .i2c_port = I2C_NUM_0,
-        .scl_io_num = I2C_MASTER_SCL_IO,
-        .sda_io_num = I2C_MASTER_SDA_IO,
-        .glitch_ignore_cnt = 7,
-        .flags.enable_internal_pullup = true,
-    };
-
-    esp_err_t err = i2c_new_master_bus(&i2c_bus_config, &i2c_bus_handle);
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "I2C bus creation failed: %s", esp_err_to_name(err));
-        return err;
-    }
-
-    // TEMPLATE: Configure your sensor device on the I2C bus
-    i2c_device_config_t sensor_cfg = {
-        .dev_addr_length = I2C_ADDR_BIT_LEN_7,
-        .device_address = SENSOR_I2C_ADDR,  // Use your sensor's I2C address
-        .scl_speed_hz = I2C_MASTER_FREQ_HZ,
-    };
-
-    err = i2c_master_bus_add_device(i2c_bus_handle, &sensor_cfg, &sensor_dev_handle);
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "Sensor device add failed: %s", esp_err_to_name(err));
-        return err;
-    }
-
-    ESP_LOGI(TAG, "I2C master initialized successfully");
-    return ESP_OK;
-}
-
-// TEMPLATE: Sensor initialization function
-// Replace this with your specific sensor initialization sequence
-static esp_err_t sensor_init(void) {
-    esp_err_t ret;
-    uint8_t cmd_data;
-
-    // TEMPLATE: Add your sensor-specific initialization sequence here
-    // Example I2C sensor initialization:
-    
-    // Power on or initialize the sensor
-    cmd_data = SENSOR_CMD_INIT;  // Replace with your sensor's init command
-    ret = i2c_master_transmit(sensor_dev_handle, &cmd_data, 1, I2C_MASTER_TIMEOUT_MS);
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Sensor initialization failed: %s", esp_err_to_name(ret));
-        return ret;
-    }
-
-    vTaskDelay(pdMS_TO_TICKS(10)); // Wait for sensor to initialize
-
-    // TEMPLATE: Add additional configuration commands for your sensor
-    // Example: Set measurement mode, resolution, etc.
-    // cmd_data = SENSOR_CMD_CONFIG;
-    // ret = i2c_master_transmit(sensor_dev_handle, &cmd_data, 1, I2C_MASTER_TIMEOUT_MS);
-    // if (ret != ESP_OK) {
-    //     ESP_LOGE(TAG, "Sensor configuration failed: %s", esp_err_to_name(ret));
-    //     return ret;
-    // }
-
-    ESP_LOGI(TAG, "Sensor initialized successfully");
-    vTaskDelay(pdMS_TO_TICKS(100)); // Wait for first measurement to be ready
-    return ESP_OK;
-}
-
-// TEMPLATE: Sensor reading function
-// Replace this with your specific sensor reading implementation
-static esp_err_t read_sensor_value(float *value1, float *value2) {
-    esp_err_t ret;
-    uint8_t data[4];  // Adjust size based on your sensor's data format
-
-    // TEMPLATE: Read data from your sensor
-    // Example I2C sensor read:
-    ret = i2c_master_receive(sensor_dev_handle, data, 2, I2C_MASTER_TIMEOUT_MS);
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Sensor read failed: %s", esp_err_to_name(ret));
-        *value1 = -1.0f; // Error value
-        *value2 = -1.0f; // Error value
-        return ret;
-    }
-
-    // TEMPLATE: Convert raw data to meaningful values
-    // Example conversion (customize for your sensor):
-    uint16_t raw_data = (data[0] << 8) | data[1];
-    *value1 = raw_data / 100.0f;  // Example conversion - adjust for your sensor
-    *value2 = raw_data / 200.0f;  // Example second value - remove if not needed
-
-    ESP_LOGD(TAG, "Sensor raw data: %d, value1: %.2f, value2: %.2f", raw_data, *value1, *value2);
-    return ESP_OK;
-}
-
 // TEMPLATE: Main sensor data reading function
 // Replace this function with your specific sensor reading logic
+// Function to read all enabled sensors and publish combined data
 static bool read_sensor_data() {
-    ESP_LOGI(TAG, "Reading sensor data...");
+    ESP_LOGI(TAG, "Reading enabled sensors...");
     
-    // Initialize sensor data fields to default/invalid values
-    current_sensor_data.sensor_value_1 = 0.0f;
-    current_sensor_data.sensor_value_2 = 0.0f;
-    current_sensor_data.sensor_ok = false;
+    bool any_sensor_successful = false;
+    cJSON *combined_json = cJSON_CreateObject();
+    cJSON *processor_json = cJSON_CreateObject();
+    cJSON *sensors_json = cJSON_CreateObject();
     
-    // TEMPLATE: Read from your sensor(s)
-    // Example I2C sensor reading:
-    float value1, value2;
-    esp_err_t ret = read_sensor_value(&value1, &value2);
+    if (!combined_json || !processor_json || !sensors_json) {
+        ESP_LOGE(TAG, "Failed to create JSON objects");
+        if (combined_json) cJSON_Delete(combined_json);
+        if (processor_json) cJSON_Delete(processor_json);
+        if (sensors_json) cJSON_Delete(sensors_json);
+        return false;
+    }
     
-    if (ret == ESP_OK && value1 >= 0) {
-        current_sensor_data.sensor_value_1 = value1;
-        current_sensor_data.sensor_value_2 = value2;  // Remove if not needed
-        current_sensor_data.sensor_ok = true;
-        ESP_LOGI(TAG, "Sensor reading successful: %.2f, %.2f", value1, value2);
+    // Add processor metrics (system information)
+    int32_t wifi_rssi_percent = get_wifi_rssi_percent();
+    cJSON_AddNumberToObject(processor_json, "WiFiRSSI", wifi_rssi_percent);
+    
+    char *ip_address = get_ip_address();
+    cJSON_AddStringToObject(processor_json, "IPAddress", ip_address);
+    
+    float cpu_temp = get_cpu_temperature();
+    cJSON_AddNumberToObject(processor_json, "CPUTemperature", cpu_temp);
+    
+    char *software_version = get_software_version();
+    cJSON_AddStringToObject(processor_json, "SoftwareVersion", software_version);
+    
+    char *chip_id = get_chip_id();
+    cJSON_AddStringToObject(processor_json, "ChipID", chip_id);
+    
+    cJSON_AddNumberToObject(processor_json, "WDTRestartCount", watchdog_reset_counter);
+    
+    // Iterate through all sensor types and read enabled ones
+    for (int i = 0; i < SENSOR_TYPE_MAX_COUNT; i++) {
+        sensor_type_t sensor_type = (sensor_type_t)i;
         
-        // Publish MQTT data only on successful sensor read
-        publish_sensor_data_mqtt(&current_sensor_data);
-        ESP_LOGI(TAG, "MQTT data published after successful sensor read");
+        if (!sensor_config_is_enabled(sensor_type)) {
+            ESP_LOGD(TAG, "Sensor %s is disabled, skipping", sensor_config_get_name(sensor_type));
+            continue;
+        }
+        
+        ESP_LOGI(TAG, "Reading %s sensor...", sensor_config_get_name(sensor_type));
+        
+        sensor_data_t sensor_data;
+        esp_err_t read_result = ESP_FAIL;
+        
+        // Read sensor based on type
+        switch (sensor_type) {
+            case SENSOR_TYPE_BH1750:
+                read_result = sensor_bh1750_read(&sensor_data);
+                break;
+                
+            case SENSOR_TYPE_BME680:
+                read_result = sensor_bme680_read(&sensor_data);
+                break;
+                
+            case SENSOR_TYPE_DHT22:
+                // TODO: Implement DHT22 reading
+                ESP_LOGW(TAG, "DHT22 reading not yet implemented");
+                continue;
+                
+            case SENSOR_TYPE_DS18B20:
+                // TODO: Implement DS18B20 reading
+                ESP_LOGW(TAG, "DS18B20 reading not yet implemented");
+                continue;
+                
+            case SENSOR_TYPE_BME280:
+                // TODO: Implement BME280 reading
+                ESP_LOGW(TAG, "BME280 reading not yet implemented");
+                continue;
+                
+            default:
+                ESP_LOGW(TAG, "Unknown sensor type: %d", sensor_type);
+                continue;
+        }
+        
+        if (read_result == ESP_OK && sensor_data.valid) {
+            // Add sensor data to the combined JSON
+            cJSON *sensor_obj = cJSON_CreateObject();
+            if (sensor_obj) {
+                // Add sensor metadata
+                cJSON_AddStringToObject(sensor_obj, "name", sensor_config_get_name(sensor_type));
+                cJSON_AddBoolToObject(sensor_obj, "valid", sensor_data.valid);
+                
+                // Add sensor-specific data
+                switch (sensor_type) {
+                    case SENSOR_TYPE_BH1750:
+                        cJSON_AddNumberToObject(sensor_obj, "lux", sensor_data.data.bh1750.lux);
+                        cJSON_AddItemToObject(sensors_json, "bh1750", sensor_obj);
+                        break;
+                        
+                    case SENSOR_TYPE_BME680:
+                        cJSON_AddNumberToObject(sensor_obj, "temperature", sensor_data.data.bme680.temperature);
+                        cJSON_AddNumberToObject(sensor_obj, "humidity", sensor_data.data.bme680.humidity);
+                        cJSON_AddNumberToObject(sensor_obj, "pressure", sensor_data.data.bme680.pressure);
+                        cJSON_AddNumberToObject(sensor_obj, "gas_resistance", sensor_data.data.bme680.gas_resistance);
+                        cJSON_AddItemToObject(sensors_json, "bme680", sensor_obj);
+                        break;
+                        
+                    case SENSOR_TYPE_DHT22:
+                        cJSON_AddNumberToObject(sensor_obj, "temperature", sensor_data.data.dht22.temperature);
+                        cJSON_AddNumberToObject(sensor_obj, "humidity", sensor_data.data.dht22.humidity);
+                        cJSON_AddItemToObject(sensors_json, "dht22", sensor_obj);
+                        break;
+                        
+                    case SENSOR_TYPE_DS18B20:
+                        cJSON_AddNumberToObject(sensor_obj, "temperature", sensor_data.data.ds18b20.temperature);
+                        cJSON_AddItemToObject(sensors_json, "ds18b20", sensor_obj);
+                        break;
+                        
+                    case SENSOR_TYPE_BME280:
+                        cJSON_AddNumberToObject(sensor_obj, "temperature", sensor_data.data.bme280.temperature);
+                        cJSON_AddNumberToObject(sensor_obj, "humidity", sensor_data.data.bme280.humidity);
+                        cJSON_AddNumberToObject(sensor_obj, "pressure", sensor_data.data.bme280.pressure);
+                        cJSON_AddItemToObject(sensors_json, "bme280", sensor_obj);
+                        break;
+                        
+                    default:
+                        cJSON_Delete(sensor_obj);
+                        continue;
+                }
+                
+                any_sensor_successful = true;
+                ESP_LOGI(TAG, "%s sensor reading successful", sensor_config_get_name(sensor_type));
+            }
+        } else {
+            ESP_LOGE(TAG, "%s sensor reading failed", sensor_config_get_name(sensor_type));
+        }
+    }
+    
+    // Combine processor and sensor data
+    cJSON_AddItemToObject(combined_json, "processor", processor_json);
+    cJSON_AddItemToObject(combined_json, "sensors", sensors_json);
+    
+    // Publish the combined message to the main data topic
+    char *json_string = cJSON_PrintUnformatted(combined_json);
+    if (json_string && any_sensor_successful) {
+        publish_combined_sensor_mqtt(data_topic, json_string);
+        ESP_LOGI(TAG, "Combined sensor data published successfully");
+        free(json_string);
+        cJSON_Delete(combined_json);
         return true;
     } else {
-        current_sensor_data.sensor_value_1 = -1.0f;  // Error value
-        current_sensor_data.sensor_value_2 = -1.0f;  // Error value
-        current_sensor_data.sensor_ok = false;
-        ESP_LOGE(TAG, "Sensor reading failed - skipping MQTT publish");
+        ESP_LOGW(TAG, "No sensor data to publish or JSON creation failed");
+        if (json_string) free(json_string);
+        cJSON_Delete(combined_json);
         return false;
     }
 }
@@ -578,12 +576,61 @@ esp_err_t params_json_get_handler(httpd_req_t *req) {
     ESP_LOGI(TAG, "Current sample_interval_ms: %ld", sample_interval_ms);
     ESP_LOGI(TAG, "Current watchdog_reset_counter: %lu", watchdog_reset_counter);
     
-    char buf[512];
-    snprintf(buf, sizeof(buf), "{\"ssid\":\"%s\",\"password\":\"%s\",\"mqtt_url\":\"%s\",\"sample_interval\":%ld,\"data_topic\":\"%s\",\"watchdog_reset_counter\":%lu}", 
-             wifi_ssid, wifi_pass, mqtt_broker_url, sample_interval_ms, data_topic, watchdog_reset_counter);
-    ESP_LOGI(TAG, "Sending params.json response: %s", buf);
+    // Create JSON response with sensor configuration
+    cJSON *json = cJSON_CreateObject();
+    cJSON *sensors = cJSON_CreateObject();
+    
+    // Basic configuration
+    cJSON_AddStringToObject(json, "ssid", wifi_ssid);
+    cJSON_AddStringToObject(json, "password", wifi_pass);
+    cJSON_AddStringToObject(json, "mqtt_url", mqtt_broker_url);
+    cJSON_AddNumberToObject(json, "sample_interval", sample_interval_ms);
+    cJSON_AddStringToObject(json, "data_topic", data_topic);
+    cJSON_AddNumberToObject(json, "watchdog_reset_counter", watchdog_reset_counter);
+    
+    // Sensor configurations
+    for (int i = 0; i < SENSOR_TYPE_MAX_COUNT; i++) {
+        sensor_config_t *config = sensor_config_get((sensor_type_t)i);
+        if (config) {
+            cJSON *sensor_obj = cJSON_CreateObject();
+            cJSON_AddBoolToObject(sensor_obj, "enabled", config->enabled);
+            cJSON_AddStringToObject(sensor_obj, "name", config->name);
+            
+            // Add sensor-specific objects
+            switch (i) {
+                case SENSOR_TYPE_BH1750:
+                    cJSON_AddItemToObject(sensors, "bh1750", sensor_obj);
+                    break;
+                case SENSOR_TYPE_BME680:
+                    cJSON_AddItemToObject(sensors, "bme680", sensor_obj);
+                    break;
+                case SENSOR_TYPE_DHT22:
+                    cJSON_AddItemToObject(sensors, "dht22", sensor_obj);
+                    break;
+                case SENSOR_TYPE_DS18B20:
+                    cJSON_AddItemToObject(sensors, "ds18b20", sensor_obj);
+                    break;
+                case SENSOR_TYPE_BME280:
+                    cJSON_AddItemToObject(sensors, "bme280", sensor_obj);
+                    break;
+                default:
+                    cJSON_Delete(sensor_obj); // Clean up unused sensor object
+                    break;
+            }
+        }
+    }
+    
+    cJSON_AddItemToObject(json, "sensors", sensors);
+    
+    char *json_string = cJSON_Print(json);
+    ESP_LOGI(TAG, "Sending params.json response: %s", json_string);
+    
     httpd_resp_set_type(req, "application/json");
-    httpd_resp_send(req, buf, HTTPD_RESP_USE_STRLEN);
+    httpd_resp_send(req, json_string, HTTPD_RESP_USE_STRLEN);
+    
+    free(json_string);
+    cJSON_Delete(json);
+    
     ESP_LOGI(TAG, "=== PARAMS.JSON RESPONSE SENT ===");
     return ESP_OK;
 }
@@ -699,6 +746,104 @@ esp_err_t params_update_post_handler(httpd_req_t *req) {
     esp_err_t watchdog_nvs_err = nvs_set_u32(nvs_handle, NVS_KEY_WATCHDOG_COUNTER, watchdog_reset_counter);
     ESP_LOGI(TAG, "Saved watchdog counter %lu to NVS with key '%s': %s", watchdog_reset_counter, NVS_KEY_WATCHDOG_COUNTER, esp_err_to_name(watchdog_nvs_err));
     ESP_LOGI(TAG, "=== WATCHDOG RESET COUNTER PROCESSING COMPLETE ===");
+    
+    // Handle Sensor Configuration Updates
+    ESP_LOGI(TAG, "=== PROCESSING SENSOR CONFIGURATIONS ===");
+    
+    // BH1750 Light Sensor
+    if (strstr(buf, "sensor_bh1750_enabled=on")) {
+        sensor_config_set_enabled(SENSOR_TYPE_BH1750, true);
+        ESP_LOGI(TAG, "BH1750 sensor enabled");
+    } else {
+        sensor_config_set_enabled(SENSOR_TYPE_BH1750, false);
+        ESP_LOGI(TAG, "BH1750 sensor disabled");
+    }
+    
+    char *bh1750_name_ptr = strstr(buf, "sensor_bh1750_name=");
+    if (bh1750_name_ptr) {
+        char name_in[32], name_dec[32];
+        sscanf(bh1750_name_ptr + 19, "%31[^&]", name_in);
+        url_decode(name_dec, name_in, sizeof(name_dec));
+        sensor_config_set_name(SENSOR_TYPE_BH1750, name_dec);
+        ESP_LOGI(TAG, "BH1750 name set to: '%s'", name_dec);
+    }
+    
+    // BME680 Environmental Sensor
+    if (strstr(buf, "sensor_bme680_enabled=on")) {
+        sensor_config_set_enabled(SENSOR_TYPE_BME680, true);
+        ESP_LOGI(TAG, "BME680 sensor enabled");
+    } else {
+        sensor_config_set_enabled(SENSOR_TYPE_BME680, false);
+        ESP_LOGI(TAG, "BME680 sensor disabled");
+    }
+    
+    char *bme680_topic_ptr = strstr(buf, "sensor_bme680_topic=");
+    if (bme680_topic_ptr) {
+        char topic_in[64], topic_dec[64];
+        sscanf(bme680_topic_ptr + 20, "%63[^&]", topic_in);
+        url_decode(topic_dec, topic_in, sizeof(topic_dec));
+        sensor_config_set_mqtt_topic(SENSOR_TYPE_BME680, topic_dec);
+        ESP_LOGI(TAG, "BME680 topic set to: '%s'", topic_dec);
+    }
+    
+    // DHT22 Temperature/Humidity
+    if (strstr(buf, "sensor_dht22_enabled=on")) {
+        sensor_config_set_enabled(SENSOR_TYPE_DHT22, true);
+        ESP_LOGI(TAG, "DHT22 sensor enabled");
+    } else {
+        sensor_config_set_enabled(SENSOR_TYPE_DHT22, false);
+        ESP_LOGI(TAG, "DHT22 sensor disabled");
+    }
+    
+    char *dht22_topic_ptr = strstr(buf, "sensor_dht22_topic=");
+    if (dht22_topic_ptr) {
+        char topic_in[64], topic_dec[64];
+        sscanf(dht22_topic_ptr + 19, "%63[^&]", topic_in);
+        url_decode(topic_dec, topic_in, sizeof(topic_dec));
+        sensor_config_set_mqtt_topic(SENSOR_TYPE_DHT22, topic_dec);
+        ESP_LOGI(TAG, "DHT22 topic set to: '%s'", topic_dec);
+    }
+    
+    // DS18B20 Temperature
+    if (strstr(buf, "sensor_ds18b20_enabled=on")) {
+        sensor_config_set_enabled(SENSOR_TYPE_DS18B20, true);
+        ESP_LOGI(TAG, "DS18B20 sensor enabled");
+    } else {
+        sensor_config_set_enabled(SENSOR_TYPE_DS18B20, false);
+        ESP_LOGI(TAG, "DS18B20 sensor disabled");
+    }
+    
+    char *ds18b20_topic_ptr = strstr(buf, "sensor_ds18b20_topic=");
+    if (ds18b20_topic_ptr) {
+        char topic_in[64], topic_dec[64];
+        sscanf(ds18b20_topic_ptr + 21, "%63[^&]", topic_in);
+        url_decode(topic_dec, topic_in, sizeof(topic_dec));
+        sensor_config_set_mqtt_topic(SENSOR_TYPE_DS18B20, topic_dec);
+        ESP_LOGI(TAG, "DS18B20 topic set to: '%s'", topic_dec);
+    }
+    
+    // BME280 Climate
+    if (strstr(buf, "sensor_bme280_enabled=on")) {
+        sensor_config_set_enabled(SENSOR_TYPE_BME280, true);
+        ESP_LOGI(TAG, "BME280 sensor enabled");
+    } else {
+        sensor_config_set_enabled(SENSOR_TYPE_BME280, false);
+        ESP_LOGI(TAG, "BME280 sensor disabled");
+    }
+    
+    char *bme280_topic_ptr = strstr(buf, "sensor_bme280_topic=");
+    if (bme280_topic_ptr) {
+        char topic_in[64], topic_dec[64];
+        sscanf(bme280_topic_ptr + 20, "%63[^&]", topic_in);
+        url_decode(topic_dec, topic_in, sizeof(topic_dec));
+        sensor_config_set_mqtt_topic(SENSOR_TYPE_BME280, topic_dec);
+        ESP_LOGI(TAG, "BME280 topic set to: '%s'", topic_dec);
+    }
+    
+    // Save sensor configuration to NVS
+    esp_err_t sensor_save_err = sensor_config_save_to_nvs();
+    ESP_LOGI(TAG, "Sensor configuration save result: %s", esp_err_to_name(sensor_save_err));
+    ESP_LOGI(TAG, "=== SENSOR CONFIGURATIONS PROCESSING COMPLETE ===");
     
     nvs_commit(nvs_handle);
     nvs_close(nvs_handle);
@@ -1294,6 +1439,34 @@ void ap_config_task(void *pvParameter) {
     load_data_topic_from_nvs();
     load_watchdog_counter_from_nvs();
     
+    // Initialize the configurable sensor system
+    ESP_LOGI(TAG, "Initializing configurable sensor system...");
+    esp_err_t sensor_init_err = sensor_config_init();
+    if (sensor_init_err == ESP_OK) {
+        ESP_LOGI(TAG, "Sensor configuration system initialized successfully");
+        
+        // Initialize enabled sensors
+        if (sensor_config_is_enabled(SENSOR_TYPE_BH1750)) {
+            esp_err_t bh1750_err = sensor_bh1750_init();
+            if (bh1750_err == ESP_OK) {
+                ESP_LOGI(TAG, "BH1750 sensor initialized successfully");
+            } else {
+                ESP_LOGE(TAG, "BH1750 sensor initialization failed: %s", esp_err_to_name(bh1750_err));
+            }
+        }
+        
+        if (sensor_config_is_enabled(SENSOR_TYPE_BME680)) {
+            esp_err_t bme680_err = sensor_bme680_init();
+            if (bme680_err == ESP_OK) {
+                ESP_LOGI(TAG, "BME680 sensor initialized successfully");
+            } else {
+                ESP_LOGE(TAG, "BME680 sensor initialization failed: %s", esp_err_to_name(bme680_err));
+            }
+        }
+    } else {
+        ESP_LOGE(TAG, "Sensor configuration system initialization failed: %s", esp_err_to_name(sensor_init_err));
+    }
+    
     // Debug: Show watchdog counter after loading from NVS
     ESP_LOGI(TAG, "*** DEBUG: watchdog_reset_counter after NVS load (AP mode): %lu ***", watchdog_reset_counter);
     
@@ -1412,23 +1585,9 @@ void app_main(void) {
         }
     }
 
-    // TEMPLATE: Initialize sensor communication (modify for your sensor type)
-    // Remove I2C initialization if not using I2C sensors
-    ESP_LOGI(TAG, "Initializing sensor communication...");
-    esp_err_t comm_err = init_i2c_master();  // Change to your communication init function
-    if (comm_err != ESP_OK) {
-        ESP_LOGE(TAG, "Sensor communication initialization failed: %s", esp_err_to_name(comm_err));
-    } else {
-        ESP_LOGI(TAG, "Sensor communication initialized successfully");
-        
-        // TEMPLATE: Initialize your specific sensor(s)
-        esp_err_t sensor_err = sensor_init();  // Replace with your sensor init function
-        if (sensor_err != ESP_OK) {
-            ESP_LOGE(TAG, "Sensor initialization failed: %s", esp_err_to_name(sensor_err));
-        } else {
-            ESP_LOGI(TAG, "Sensor initialized successfully");
-        }
-    }
+    // TEMPLATE: Legacy sensor initialization (now handled by sensor config system)
+    // The new configurable sensor system handles sensor initialization based on configuration
+    ESP_LOGI(TAG, "Legacy sensor initialization is handled by the configurable sensor system");
 
     // Debug: Show watchdog counter before loading from NVS
     ESP_LOGI(TAG, "*** DEBUG: watchdog_reset_counter before NVS load (normal mode): %lu ***", watchdog_reset_counter);
@@ -1438,6 +1597,42 @@ void app_main(void) {
     load_sample_interval_from_nvs();
     load_data_topic_from_nvs();
     load_watchdog_counter_from_nvs();
+    
+    // Initialize sensor configuration system
+    ESP_LOGI(TAG, "Initializing sensor configuration system...");
+    esp_err_t sensor_config_err = sensor_config_init();
+    if (sensor_config_err != ESP_OK) {
+        ESP_LOGE(TAG, "Sensor configuration initialization failed: %s", esp_err_to_name(sensor_config_err));
+    } else {
+        ESP_LOGI(TAG, "Sensor configuration system initialized successfully");
+        
+        // Initialize enabled sensors
+        ESP_LOGI(TAG, "Initializing enabled sensors...");
+        if (sensor_config_is_enabled(SENSOR_TYPE_BH1750)) {
+            esp_err_t bh1750_err = sensor_bh1750_init();
+            if (bh1750_err == ESP_OK) {
+                ESP_LOGI(TAG, "BH1750 sensor initialized successfully");
+            } else {
+                ESP_LOGE(TAG, "BH1750 sensor initialization failed: %s", esp_err_to_name(bh1750_err));
+            }
+        }
+        
+        if (sensor_config_is_enabled(SENSOR_TYPE_BME680)) {
+            esp_err_t bme680_err = sensor_bme680_init();
+            if (bme680_err == ESP_OK) {
+                ESP_LOGI(TAG, "BME680 sensor initialized successfully");
+            } else {
+                ESP_LOGE(TAG, "BME680 sensor initialization failed: %s", esp_err_to_name(bme680_err));
+            }
+        }
+        
+        // Add initialization for other sensors as they are implemented
+        // if (sensor_config_is_enabled(SENSOR_TYPE_DHT22)) { ... }
+        // if (sensor_config_is_enabled(SENSOR_TYPE_DS18B20)) { ... }
+        // if (sensor_config_is_enabled(SENSOR_TYPE_BME280)) { ... }
+        
+        ESP_LOGI(TAG, "Sensor initialization complete");
+    }
     
     // Debug: Show watchdog counter after loading from NVS
     ESP_LOGI(TAG, "*** DEBUG: watchdog_reset_counter after NVS load (normal mode): %lu ***", watchdog_reset_counter);
@@ -1926,89 +2121,44 @@ static char* get_chip_id(void) {
 }
 
 // Function to publish sensor data to MQTT broker
-// This function will be expanded to create and send the two JSON messages
-void publish_sensor_data_mqtt(const sensor_data_t *sensor_data_ptr) {
-    if (debug_logging) printf("[DEBUG] publish_sensor_data_mqtt() called\n");
-    
+// Function to publish combined sensor data to main MQTT topic
+void publish_combined_sensor_mqtt(const char* topic, const char* json_data) {
     if (!mqtt_client) {
         ESP_LOGE(TAG, "MQTT client not initialized!");
-        if (debug_logging) printf("[DEBUG] MQTT client not initialized - returning\n");
         return;
     }
-
-    ESP_LOGI(TAG, "Preparing to publish sensor data via MQTT...");
-
-    // TEMPLATE: Create JSON with your specific data structure
-    cJSON *root = cJSON_CreateObject();
-    if (!root) {
-        ESP_LOGE(TAG, "Failed to create cJSON root object.");
+    
+    if (!topic || !json_data) {
+        ESP_LOGE(TAG, "Invalid topic or JSON data");
         return;
     }
-
-    // Add processor metrics data first (system information)
-    cJSON *processor_root = cJSON_CreateObject();
-    if (processor_root) {
-        // WiFi RSSI as percentage
-        int32_t wifi_rssi_percent = get_wifi_rssi_percent();
-        cJSON_AddNumberToObject(processor_root, "WiFiRSSI", wifi_rssi_percent);
+    
+    ESP_LOGI(TAG, "Publishing combined sensor data to topic: %s", topic);
+    ESP_LOGD(TAG, "JSON data: %s", json_data);
+    
+    int msg_id = esp_mqtt_client_publish(mqtt_client, topic, json_data, 0, 1, 0);
+    if (msg_id >= 0) {
+        ESP_LOGI(TAG, "Successfully published combined data to %s (msg_id: %d, length: %d)", topic, msg_id, strlen(json_data));
         
-        // IP Address
-        char *ip_address = get_ip_address();
-        cJSON_AddStringToObject(processor_root, "IPAddress", ip_address);
-        
-        // CPU Temperature
-        float cpu_temp = get_cpu_temperature();
-        cJSON_AddNumberToObject(processor_root, "CPUTemperature", cpu_temp);
-        
-        // Software Version
-        char *software_version = get_software_version();
-        cJSON_AddStringToObject(processor_root, "SoftwareVersion", software_version);
-        
-        // ESP32 Chip ID
-        char *chip_id = get_chip_id();
-        cJSON_AddStringToObject(processor_root, "ChipID", chip_id);
-        
-        // Watchdog Restart Count
-        cJSON_AddNumberToObject(processor_root, "WDTRestartCount", watchdog_reset_counter);
-        
-        cJSON_AddItemToObject(root, "processor", processor_root);
-    }
-
-    // TEMPLATE: Add your specific sensor data formatting here
-    // Replace with your sensor-specific data fields
-    cJSON *data_root = cJSON_CreateObject();
-    if (data_root) {
-        // TEMPLATE: Add your sensor data fields here
-        // Examples (customize for your sensors):
-        cJSON_AddNumberToObject(data_root, "sensor_value_1", sensor_data_ptr->sensor_value_1);
-        cJSON_AddNumberToObject(data_root, "sensor_value_2", sensor_data_ptr->sensor_value_2);
-        cJSON_AddBoolToObject(data_root, "sensor_ok", sensor_data_ptr->sensor_ok);
-        
-        // TEMPLATE: Add more fields as needed for your specific sensors
-        // Examples:
-        // cJSON_AddNumberToObject(data_root, "temperature", sensor_data_ptr->temperature);
-        // cJSON_AddNumberToObject(data_root, "humidity", sensor_data_ptr->humidity);
-        // cJSON_AddNumberToObject(data_root, "pressure", sensor_data_ptr->pressure);
-        // cJSON_AddBoolToObject(data_root, "sensor_1_ok", sensor_data_ptr->sensor_1_ok);
-        
-        cJSON_AddItemToObject(root, "data", data_root);
-    }
-
-    // Publish as a single topic
-    char *json_string = cJSON_PrintUnformatted(root);
-    if (json_string == NULL) {
-        ESP_LOGE(TAG, "Failed to print combined cJSON to string.");
+        // Update last successful publish time for watchdog
+        last_successful_publish = xTaskGetTickCount();
+        mqtt_publish_success = true;
     } else {
-        char topic[64];
-        // Use data_topic directly (you may want to rename this variable for your use case)
-        snprintf(topic, sizeof(topic), "%s", data_topic);
-        if (debug_logging) printf("[DEBUG] About to publish to topic: %s\n", topic);
-        if (debug_logging) printf("[DEBUG] JSON payload length: %d\n", strlen(json_string));
-        esp_mqtt_client_publish(mqtt_client, topic, json_string, 0, 1, 0);
-        ESP_LOGI(TAG, "Published to %s (length: %d)", topic, strlen(json_string));
-        free(json_string);
+        ESP_LOGE(TAG, "Failed to publish combined data to %s (error: %d)", topic, msg_id);
     }
-    cJSON_Delete(root);
+}
+
+void publish_sensor_data_mqtt(const char* topic, const char* json_data) {
+    // Legacy function - now just calls the combined sensor publish function
+    // This is kept for backward compatibility but is not used in the new system
+    if (debug_logging) printf("[DEBUG] Legacy publish_sensor_data_mqtt() called\n");
+    
+    if (!topic || !json_data) {
+        ESP_LOGE(TAG, "Invalid topic or JSON data in legacy function");
+        return;
+    }
+    
+    publish_combined_sensor_mqtt(topic, json_data);
 }
 
 // Helper to convert hex char to int

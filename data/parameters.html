@@ -152,7 +152,7 @@
             <label>Sample Interval (ms):
                 <input type="number" name="sample_interval" id="sample_interval" min="100" max="86400000" required>
             </label>
-            <label>Data Topic:
+            <label>MQTT Topic:
                 <input type="text" name="data_topic" id="data_topic" maxlength="40" required>
             </label>
             <label>Watchdog Reset Counter:
@@ -161,6 +161,70 @@
                     Counter increments each time the watchdog timeout occurs
                 </div>
             </label>
+            
+            <!-- Sensor Configuration Section -->
+            <div style="margin-top: 2em; padding-top: 2em; border-top: 2px solid #e0e0e0;">
+                <h3 style="color: var(--primary); margin-bottom: 1em;">Sensor Configuration</h3>
+                <p style="margin-bottom: 1em; color: #666; font-size: 0.9em;">
+                    Enable/disable sensors and configure their names. All sensor data will be published to the main MQTT topic above.
+                </p>
+                
+                <!-- BH1750 Light Sensor -->
+                <div style="border: 1px solid #e0e0e0; border-radius: 8px; padding: 1em; margin-bottom: 1em;">
+                    <label style="display: flex; align-items: center; margin-bottom: 0.5em;">
+                        <input type="checkbox" name="sensor_bh1750_enabled" id="sensor_bh1750_enabled" style="margin-right: 0.5em;">
+                        <strong>BH1750 Light Sensor</strong>
+                    </label>
+                    <label style="margin-top: 0.5em;">Sensor Name:
+                        <input type="text" name="sensor_bh1750_name" id="sensor_bh1750_name" value="BH1750 Light Sensor" maxlength="31" placeholder="Custom sensor name">
+                    </label>
+                </div>
+                
+                <!-- BME680 Environmental Sensor -->
+                <div style="border: 1px solid #e0e0e0; border-radius: 8px; padding: 1em; margin-bottom: 1em;">
+                    <label style="display: flex; align-items: center; margin-bottom: 0.5em;">
+                        <input type="checkbox" name="sensor_bme680_enabled" id="sensor_bme680_enabled" style="margin-right: 0.5em;">
+                        <strong>BME680 Environmental (Temp/Humidity/Pressure/Gas)</strong>
+                    </label>
+                    <div style="font-size: 0.8em; color: #666; margin-top: 0.3em;">
+                        Note: BME680 implementation is currently a stub. Enable for future use.
+                    </div>
+                </div>
+                
+                <!-- DHT22 Temperature/Humidity Sensor -->
+                <div style="border: 1px solid #e0e0e0; border-radius: 8px; padding: 1em; margin-bottom: 1em;">
+                    <label style="display: flex; align-items: center; margin-bottom: 0.5em;">
+                        <input type="checkbox" name="sensor_dht22_enabled" id="sensor_dht22_enabled" style="margin-right: 0.5em;">
+                        <strong>DHT22 Temperature/Humidity Sensor</strong>
+                    </label>
+                    <div style="font-size: 0.8em; color: #666; margin-top: 0.3em;">
+                        Note: DHT22 implementation not yet added. Enable for future use.
+                    </div>
+                </div>
+                
+                <!-- DS18B20 Temperature Sensor -->
+                <div style="border: 1px solid #e0e0e0; border-radius: 8px; padding: 1em; margin-bottom: 1em;">
+                    <label style="display: flex; align-items: center; margin-bottom: 0.5em;">
+                        <input type="checkbox" name="sensor_ds18b20_enabled" id="sensor_ds18b20_enabled" style="margin-right: 0.5em;">
+                        <strong>DS18B20 Temperature Sensor</strong>
+                    </label>
+                    <div style="font-size: 0.8em; color: #666; margin-top: 0.3em;">
+                        Note: DS18B20 implementation not yet added. Enable for future use.
+                    </div>
+                </div>
+                
+                <!-- BME280 Climate Sensor -->
+                <div style="border: 1px solid #e0e0e0; border-radius: 8px; padding: 1em; margin-bottom: 1em;">
+                    <label style="display: flex; align-items: center; margin-bottom: 0.5em;">
+                        <input type="checkbox" name="sensor_bme280_enabled" id="sensor_bme280_enabled" style="margin-right: 0.5em;">
+                        <strong>BME280 Climate Sensor (Temp/Humidity/Pressure)</strong>
+                    </label>
+                    <div style="font-size: 0.8em; color: #666; margin-top: 0.3em;">
+                        Note: BME280 implementation not yet added. Enable for future use.
+                    </div>
+                </div>
+            </div>
+            
             <button type="submit">Save & Reboot</button>
         </form>
         
@@ -228,6 +292,35 @@
             document.getElementById('sample_interval').value = cfg.sample_interval || 5000;
             document.getElementById('data_topic').value = cfg.data_topic || 'sensors/light/data';
             document.getElementById('watchdog_reset_counter').value = cfg.watchdog_reset_counter || 0;
+            
+            // Load sensor configurations
+            if (cfg.sensors) {
+                // BH1750 Light Sensor
+                if (cfg.sensors.bh1750) {
+                    document.getElementById('sensor_bh1750_enabled').checked = cfg.sensors.bh1750.enabled || false;
+                    document.getElementById('sensor_bh1750_name').value = cfg.sensors.bh1750.name || 'BH1750 Light Sensor';
+                }
+                
+                // BME680 Environmental Sensor
+                if (cfg.sensors.bme680) {
+                    document.getElementById('sensor_bme680_enabled').checked = cfg.sensors.bme680.enabled || false;
+                }
+                
+                // DHT22 Temperature/Humidity
+                if (cfg.sensors.dht22) {
+                    document.getElementById('sensor_dht22_enabled').checked = cfg.sensors.dht22.enabled || false;
+                }
+                
+                // DS18B20 Temperature
+                if (cfg.sensors.ds18b20) {
+                    document.getElementById('sensor_ds18b20_enabled').checked = cfg.sensors.ds18b20.enabled || false;
+                }
+                
+                // BME280 Climate
+                if (cfg.sensors.bme280) {
+                    document.getElementById('sensor_bme280_enabled').checked = cfg.sensors.bme280.enabled || false;
+                }
+            }
         }).catch(err => {
             console.log('Error fetching params.json: ' + err.message);
         });
