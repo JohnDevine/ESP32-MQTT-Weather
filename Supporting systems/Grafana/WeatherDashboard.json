@@ -1,0 +1,820 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "description": "Weather data including Temperature, Pressure, Humidity for a particular place and a particular sensor ie Place = Baanfalang and sensor = Office01",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": 12,
+  "links": [],
+  "panels": [
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "eerly85rktxq8d"
+      },
+      "description": "Latest temperature reading from selected device",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "decimals": 1,
+          "displayName": "${__field.labels.site_name} - ${__field.labels.device_id}",
+          "mappings": [],
+          "max": 50,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue"
+              },
+              {
+                "color": "yellow",
+                "value": 15
+              },
+              {
+                "color": "green",
+                "value": 25
+              },
+              {
+                "color": "#EAB839",
+                "value": 35
+              },
+              {
+                "color": "dark-red",
+                "value": 45
+              }
+            ]
+          },
+          "unit": "celsius"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 3,
+        "x": 0,
+        "y": 0
+      },
+      "id": 2,
+      "options": {
+        "minVizHeight": 75,
+        "minVizWidth": 75,
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showThresholdLabels": true,
+        "showThresholdMarkers": true,
+        "sizing": "auto"
+      },
+      "pluginVersion": "12.0.2",
+      "targets": [
+        {
+          "query": "from(bucket: \"Weather\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"Readings\")\n  |> filter(fn: (r) => r[\"device_type\"] == \"weather\")\n  |> filter(fn: (r) => r[\"site_name\"] == \"${site_name}\")\n  |> filter(fn: (r) => r[\"device_id\"] =~ /^(${device_id:regex})$/)\n  |> filter(fn: (r) => r[\"_field\"] == \"temperature\")\n  |> last()\n  |> yield(name: \"current_temperature\")",
+          "refId": "A"
+        }
+      ],
+      "title": "Current Temperature",
+      "type": "gauge"
+    },
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "eerly85rktxq8d"
+      },
+      "description": "Temperature readings from selected weather devices",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "Temperature (°C)",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "decimals": 1,
+          "displayName": "${__field.labels.site_name} - ${__field.labels.device_id}",
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "celsius"
+        },
+        "overrides": [
+          {
+            "__systemRef": "hideSeriesFrom",
+            "matcher": {
+              "id": "byNames",
+              "options": {
+                "mode": "exclude",
+                "names": [
+                  "baanfarang - office01"
+                ],
+                "prefix": "All except:",
+                "readOnly": true
+              }
+            },
+            "properties": [
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": true
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 21,
+        "x": 3,
+        "y": 0
+      },
+      "id": 1,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull",
+            "min",
+            "max",
+            "mean"
+          ],
+          "displayMode": "table",
+          "placement": "right",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.0.2",
+      "targets": [
+        {
+          "datasource": {
+            "type": "influxdb",
+            "uid": "eerly85rktxq8d"
+          },
+          "query": "from(bucket: \"Weather\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"Readings\")\n  |> filter(fn: (r) => r[\"device_type\"] == \"weather\")\n  |> filter(fn: (r) => r[\"site_name\"] == \"${site_name}\")\n  |> filter(fn: (r) => r[\"device_id\"] =~ /^(${device_id:regex})$/)\n  |> filter(fn: (r) => r[\"_field\"] == \"temperature\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> yield(name: \"temperature\")",
+          "refId": "A"
+        }
+      ],
+      "title": "Temperature over time",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "eerly85rktxq8d"
+      },
+      "description": "Latest humidity reading from selected device",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "displayName": "${__field.labels.site_name} - ${__field.labels.device_id}",
+          "mappings": [],
+          "max": 100,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "dark-red"
+              },
+              {
+                "color": "green",
+                "value": 30
+              },
+              {
+                "color": "#EAB839",
+                "value": 40
+              },
+              {
+                "color": "dark-red",
+                "value": 70
+              },
+              {
+                "color": "dark-red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 3,
+        "x": 0,
+        "y": 6
+      },
+      "id": 3,
+      "options": {
+        "minVizHeight": 75,
+        "minVizWidth": 75,
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showThresholdLabels": true,
+        "showThresholdMarkers": true,
+        "sizing": "auto"
+      },
+      "pluginVersion": "12.0.2",
+      "targets": [
+        {
+          "query": "from(bucket: \"Weather\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"Readings\")\n  |> filter(fn: (r) => r[\"device_type\"] == \"weather\")\n  |> filter(fn: (r) => r[\"site_name\"] == \"${site_name}\")\n  |> filter(fn: (r) => r[\"device_id\"] =~ /^(${device_id:regex})$/)\n  |> filter(fn: (r) => r[\"_field\"] == \"humidity\")\n  |> last()\n  |> yield(name: \"current_humidity\")",
+          "refId": "A"
+        }
+      ],
+      "title": "Current Humidity",
+      "type": "gauge"
+    },
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "eerly85rktxq8d"
+      },
+      "description": "Humidity readings from selected weather devices",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "Humidity (%)",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "decimals": 1,
+          "displayName": "${__field.labels.site_name} - ${__field.labels.device_id}",
+          "mappings": [],
+          "max": 100,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 21,
+        "x": 3,
+        "y": 6
+      },
+      "id": 4,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull",
+            "min",
+            "max",
+            "mean"
+          ],
+          "displayMode": "table",
+          "placement": "right",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.0.2",
+      "targets": [
+        {
+          "query": "from(bucket: \"Weather\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"Readings\")\n  |> filter(fn: (r) => r[\"device_type\"] == \"weather\")\n  |> filter(fn: (r) => r[\"site_name\"] == \"${site_name}\")\n  |> filter(fn: (r) => r[\"device_id\"] =~ /^(${device_id:regex})$/)\n  |> filter(fn: (r) => r[\"_field\"] == \"humidity\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> yield(name: \"humidity\")",
+          "refId": "A"
+        }
+      ],
+      "title": "Humidity Over Time",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "eerly85rktxq8d"
+      },
+      "description": "Latest atmospheric pressure reading from selected device",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "displayName": "${__field.labels.site_name} - ${__field.labels.device_id}",
+          "mappings": [],
+          "max": 1050,
+          "min": 950,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "yellow"
+              },
+              {
+                "color": "red",
+                "value": 950
+              },
+              {
+                "color": "dark-green",
+                "value": 1000
+              },
+              {
+                "color": "#EAB839",
+                "value": 1030
+              },
+              {
+                "color": "dark-red",
+                "value": 1040
+              }
+            ]
+          },
+          "unit": "pressurehpa"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 3,
+        "x": 0,
+        "y": 11
+      },
+      "id": 5,
+      "options": {
+        "minVizHeight": 75,
+        "minVizWidth": 75,
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showThresholdLabels": true,
+        "showThresholdMarkers": true,
+        "sizing": "auto"
+      },
+      "pluginVersion": "12.0.2",
+      "targets": [
+        {
+          "query": "from(bucket: \"Weather\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"Readings\")\n  |> filter(fn: (r) => r[\"device_type\"] == \"weather\")\n  |> filter(fn: (r) => r[\"site_name\"] == \"${site_name}\")\n  |> filter(fn: (r) => r[\"device_id\"] =~ /^(${device_id:regex})$/)\n  |> filter(fn: (r) => r[\"_field\"] == \"pressure\")\n  |> last()\n  |> yield(name: \"current_pressure\")",
+          "refId": "A"
+        }
+      ],
+      "title": "Current Pressure",
+      "type": "gauge"
+    },
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "eerly85rktxq8d"
+      },
+      "description": "Pressure readings from selected weather devices",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "Pressure (hPa)",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "decimals": 1,
+          "displayName": "${__field.labels.site_name} - ${__field.labels.device_id}",
+          "mappings": [],
+          "max": 1050,
+          "min": 950,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "pressurehpa"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 21,
+        "x": 3,
+        "y": 11
+      },
+      "id": 6,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull",
+            "min",
+            "max",
+            "mean"
+          ],
+          "displayMode": "table",
+          "placement": "right",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.0.2",
+      "targets": [
+        {
+          "query": "from(bucket: \"Weather\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"Readings\")\n  |> filter(fn: (r) => r[\"device_type\"] == \"weather\")\n  |> filter(fn: (r) => r[\"site_name\"] == \"${site_name}\")\n  |> filter(fn: (r) => r[\"device_id\"] =~ /^(${device_id:regex})$/)\n  |> filter(fn: (r) => r[\"_field\"] == \"pressure\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> yield(name: \"pressure\")",
+          "refId": "A"
+        }
+      ],
+      "title": "Atmospheric Pressure Over Time",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "eerly85rktxq8d"
+      },
+      "description": "Latest light intensity reading from selected device\n",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "decimals": 1,
+          "displayName": "${__field.labels.site_name} - ${__field.labels.device_id}",
+          "mappings": [],
+          "max": 10000,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "dark-purple"
+              },
+              {
+                "color": "dark-blue",
+                "value": 1
+              },
+              {
+                "color": "light-blue",
+                "value": 10
+              },
+              {
+                "color": "dark-green",
+                "value": 100
+              },
+              {
+                "color": "#EAB839",
+                "value": 1000
+              },
+              {
+                "color": "dark-orange",
+                "value": 5000
+              },
+              {
+                "color": "dark-red",
+                "value": 10000
+              }
+            ]
+          },
+          "unit": "lumens"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 3,
+        "x": 0,
+        "y": 16
+      },
+      "id": 7,
+      "options": {
+        "minVizHeight": 75,
+        "minVizWidth": 75,
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showThresholdLabels": true,
+        "showThresholdMarkers": true,
+        "sizing": "auto"
+      },
+      "pluginVersion": "12.0.2",
+      "targets": [
+        {
+          "query": "from(bucket: \"Weather\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"Readings\")\n  |> filter(fn: (r) => r[\"device_type\"] == \"weather\")\n  |> filter(fn: (r) => r[\"site_name\"] == \"${site_name}\")\n  |> filter(fn: (r) => r[\"device_id\"] =~ /^(${device_id:regex})$/)\n  |> filter(fn: (r) => r[\"_field\"] == \"lux\")\n  |> last()\n  |> yield(name: \"current_lux\")",
+          "refId": "A"
+        }
+      ],
+      "title": "Current Light Level",
+      "type": "gauge"
+    },
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "eerly85rktxq8d"
+      },
+      "description": "Light intensity readings from selected weather devices",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "decimals": 1,
+          "displayName": "${__field.labels.site_name} - ${__field.labels.device_id}",
+          "mappings": [],
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "lumens"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 21,
+        "x": 3,
+        "y": 16
+      },
+      "id": 8,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull",
+            "min",
+            "max",
+            "mean"
+          ],
+          "displayMode": "table",
+          "placement": "right",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.0.2",
+      "targets": [
+        {
+          "query": "from(bucket: \"Weather\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"Readings\")\n  |> filter(fn: (r) => r[\"device_type\"] == \"weather\")\n  |> filter(fn: (r) => r[\"site_name\"] == \"${site_name}\")\n  |> filter(fn: (r) => r[\"device_id\"] =~ /^(${device_id:regex})$/)\n  |> filter(fn: (r) => r[\"_field\"] == \"lux\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> yield(name: \"lux\")",
+          "refId": "A"
+        }
+      ],
+      "title": "Light Level Over Time",
+      "type": "timeseries"
+    }
+  ],
+  "preload": false,
+  "refresh": "5s",
+  "schemaVersion": 41,
+  "tags": [],
+  "templating": {
+    "list": [
+      {
+        "allowCustomValue": false,
+        "current": {
+          "text": "baanfarang",
+          "value": "baanfarang"
+        },
+        "definition": "import \"influxdata/influxdb/schema\"\n\nschema.tagValues(\n    bucket: \"Weather\",\n    tag: \"site_name\",\n    predicate: (r) => r._measurement == \"Readings\" and r.device_type == \"weather\"\n)",
+        "label": "Site Name",
+        "name": "site_name",
+        "options": [],
+        "query": {
+          "query": "import \"influxdata/influxdb/schema\"\n\nschema.tagValues(\n    bucket: \"Weather\",\n    tag: \"site_name\",\n    predicate: (r) => r._measurement == \"Readings\" and r.device_type == \"weather\"\n)"
+        },
+        "refresh": 1,
+        "regex": "",
+        "type": "query"
+      },
+      {
+        "allowCustomValue": false,
+        "current": {
+          "text": [
+            "office01"
+          ],
+          "value": [
+            "office01"
+          ]
+        },
+        "definition": "import \"influxdata/influxdb/schema\"\n\nschema.tagValues(\n    bucket: \"Weather\",\n    tag: \"device_id\",\n    predicate: (r) => r._measurement == \"Readings\" and r.device_type == \"weather\" and r.site_name == \"${site_name}\"\n)",
+        "description": "",
+        "includeAll": true,
+        "label": "Device ID",
+        "multi": true,
+        "name": "device_id",
+        "options": [],
+        "query": {
+          "query": "import \"influxdata/influxdb/schema\"\n\nschema.tagValues(\n    bucket: \"Weather\",\n    tag: \"device_id\",\n    predicate: (r) => r._measurement == \"Readings\" and r.device_type == \"weather\" and r.site_name == \"${site_name}\"\n)"
+        },
+        "refresh": 2,
+        "regex": "",
+        "type": "query"
+      }
+    ]
+  },
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Weather",
+  "uid": "709e976a-de91-4d01-9a41-9bca394bb7ed",
+  "version": 18
+}

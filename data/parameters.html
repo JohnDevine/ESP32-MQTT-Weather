@@ -186,8 +186,11 @@
                         <input type="checkbox" name="sensor_bme680_enabled" id="sensor_bme680_enabled" style="margin-right: 0.5em;">
                         <strong>BME680 Environmental (Temp/Humidity/Pressure/Gas)</strong>
                     </label>
+                    <label style="margin-top: 0.5em;">Sensor Name:
+                        <input type="text" name="sensor_bme680_name" id="sensor_bme680_name" value="BME680 Environmental" maxlength="31" placeholder="Custom sensor name">
+                    </label>
                     <div style="font-size: 0.8em; color: #666; margin-top: 0.3em;">
-                        Note: BME680 implementation is currently a stub. Enable for future use.
+                        I2C interface: SDA=GPIO21, SCL=GPIO22. Current address: 0x77 (SDO to VDDIO)
                     </div>
                 </div>
                 
@@ -304,6 +307,7 @@
                 // BME680 Environmental Sensor
                 if (cfg.sensors.bme680) {
                     document.getElementById('sensor_bme680_enabled').checked = cfg.sensors.bme680.enabled || false;
+                    document.getElementById('sensor_bme680_name').value = cfg.sensors.bme680.name || 'BME680 Environmental';
                 }
                 
                 // DHT22 Temperature/Humidity

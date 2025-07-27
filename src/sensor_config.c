@@ -25,15 +25,15 @@ static const sensor_config_t default_configs[SENSOR_TYPE_MAX_COUNT] = {
     // BH1750 Light Sensor
     {
         .type = SENSOR_TYPE_BH1750,
-        .enabled = false,
-        .name = "BH1750 Light Sensor",
+        .enabled = true,  // Enable by default - needed for I2C bus initialization
+        .name = "BH1750 Office",
         .mqtt_topic = "sensors/light/bh1750",
         .sample_interval_ms = 0  // Use global interval
     },
     // BME680 Environmental Sensor
     {
         .type = SENSOR_TYPE_BME680,
-        .enabled = false,
+        .enabled = true,  // Enable by default for testing
         .name = "BME680 Environmental",
         .mqtt_topic = "sensors/environment/bme680",
         .sample_interval_ms = 0
@@ -112,6 +112,14 @@ esp_err_t sensor_config_init(void) {
     
     // Load configuration from NVS
     sensor_config_load_from_nvs();
+    
+    // Debug: Print loaded configuration
+    ESP_LOGI(TAG, "Loaded sensor configurations:");
+    for (int i = 0; i < SENSOR_TYPE_MAX_COUNT; i++) {
+        ESP_LOGI(TAG, "Loaded sensor %d: enabled=%d, name='%s', topic='%s', interval=%lu", 
+                 i, sensor_configs[i].enabled, sensor_configs[i].name, 
+                 sensor_configs[i].mqtt_topic, sensor_configs[i].sample_interval_ms);
+    }
     
     config_initialized = true;
     ESP_LOGI(TAG, "Sensor configuration system initialized");

@@ -39,8 +39,8 @@ static const char *TAG = "BH1750";
 #define I2C_MASTER_FREQ_HZ      100000
 #define I2C_MASTER_TIMEOUT_MS   1000
 
-// Global I2C handles
-static i2c_master_bus_handle_t i2c_bus_handle = NULL;
+// Global I2C handles (shared with other sensors)
+i2c_master_bus_handle_t i2c_bus_handle = NULL;  // Make this global for other sensors
 static i2c_master_dev_handle_t bh1750_dev_handle = NULL;
 static bool bh1750_initialized = false;
 
@@ -87,7 +87,6 @@ static esp_err_t bh1750_read_data(uint16_t *raw_data) {
     
     if (ret == ESP_OK) {
         *raw_data = (data[0] << 8) | data[1];
-        ESP_LOGD(TAG, "Raw data received: 0x%04X", *raw_data);
     } else {
         ESP_LOGE(TAG, "Failed to read data: %s", esp_err_to_name(ret));
     }
@@ -137,17 +136,11 @@ esp_err_t sensor_bh1750_init(void) {
     
     vTaskDelay(pdMS_TO_TICKS(10)); // Wait for reset
     
-    // Set continuous high resolution mode
-    ret = bh1750_send_command(BH1750_CONT_HIGH_RES);
-    if (ret != ESP_OK) {
-        return ret;
-    }
-    
-    // Wait for first measurement to be ready
-    vTaskDelay(pdMS_TO_TICKS(BH1750_CONVERSION_TIME_MS));
+    // Note: We don't set continuous mode here as we use one-time measurements
+    // in the read function for more responsive and accurate readings
     
     bh1750_initialized = true;
-    ESP_LOGI(TAG, "BH1750 sensor initialized successfully");
+    ESP_LOGI(TAG, "BH1750 sensor initialized successfully (one-time measurement mode)");
     
     return ESP_OK;
 }
@@ -167,8 +160,18 @@ esp_err_t sensor_bh1750_read(sensor_data_t* data) {
     data->type = SENSOR_TYPE_BH1750;
     data->valid = false;
     
+    // Trigger a fresh one-time high resolution measurement
+    esp_err_t ret = bh1750_send_command(BH1750_ONE_TIME_HIGH_RES);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to trigger measurement");
+        return ret;
+    }
+    
+    // Wait for measurement to complete (180ms for high resolution)
+    vTaskDelay(pdMS_TO_TICKS(BH1750_CONVERSION_TIME_MS));
+    
     uint16_t raw_data;
-    esp_err_t ret = bh1750_read_data(&raw_data);
+    ret = bh1750_read_data(&raw_data);
     
     if (ret == ESP_OK) {
         // Convert raw data to lux
@@ -179,7 +182,7 @@ esp_err_t sensor_bh1750_read(sensor_data_t* data) {
         data->data.bh1750.lux = lux;
         data->valid = true;
         
-        ESP_LOGI(TAG, "BH1750 reading: %.1f lux (raw: %d)", lux, raw_data);
+        ESP_LOGI(TAG, "BH1750 reading: %.1f lux", lux);
     } else {
         ESP_LOGE(TAG, "Failed to read BH1750 data");
         data->data.bh1750.lux = -1.0f; // Error value

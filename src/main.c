@@ -72,6 +72,7 @@
 
 // Sensor configuration system
 #include "sensor_config.h"
+#include "i2c_scanner.h"  // I2C diagnostic tool
 
 // Added for Wi-Fi and MQTT
 #include "esp_wifi.h"
@@ -133,7 +134,7 @@ static char wifi_ssid[33] = DEFAULT_WIFI_SSID;
 static char wifi_pass[65] = DEFAULT_WIFI_PASS;
 static char mqtt_broker_url[128] = DEFAULT_MQTT_BROKER_URL;
 // TEMPLATE: Update default topic name for your sensor type
-char data_topic[41] = "Data/Sensor";  // Default MQTT topic for sensor data
+char data_topic[41] = "sensor/baanfarang/weather/office01";  // Default MQTT topic for sensor data
 static long sample_interval_ms = DEFAULT_SAMPLE_INTERVAL;
 static uint32_t watchdog_reset_counter = 0;  // Watchdog timer reset counter
 
@@ -1445,7 +1446,7 @@ void ap_config_task(void *pvParameter) {
     if (sensor_init_err == ESP_OK) {
         ESP_LOGI(TAG, "Sensor configuration system initialized successfully");
         
-        // Initialize enabled sensors
+        // Initialize enabled sensors (BH1750 first as it creates the shared I2C bus)
         if (sensor_config_is_enabled(SENSOR_TYPE_BH1750)) {
             esp_err_t bh1750_err = sensor_bh1750_init();
             if (bh1750_err == ESP_OK) {
@@ -1455,13 +1456,28 @@ void ap_config_task(void *pvParameter) {
             }
         }
         
+        // DIAGNOSTIC: Scan I2C bus to see what devices are connected
+        ESP_LOGI(TAG, "Running I2C bus diagnostic scan...");
+        i2c_scanner_scan_bus();
+        
+        ESP_LOGI(TAG, "Checking BME680 sensor configuration...");
         if (sensor_config_is_enabled(SENSOR_TYPE_BME680)) {
+            ESP_LOGI(TAG, "BME680 sensor is enabled, initializing...");
+            
+            // DIAGNOSTIC: Detailed analysis of device at 0x76 and 0x77
+            ESP_LOGI(TAG, "Analyzing device at 0x76...");
+            i2c_scanner_identify_chip_id(0x76);
+            ESP_LOGI(TAG, "Analyzing device at 0x77...");
+            i2c_scanner_identify_chip_id(0x77);
+            
             esp_err_t bme680_err = sensor_bme680_init();
             if (bme680_err == ESP_OK) {
                 ESP_LOGI(TAG, "BME680 sensor initialized successfully");
             } else {
                 ESP_LOGE(TAG, "BME680 sensor initialization failed: %s", esp_err_to_name(bme680_err));
             }
+        } else {
+            ESP_LOGW(TAG, "BME680 sensor is disabled in configuration");
         }
     } else {
         ESP_LOGE(TAG, "Sensor configuration system initialization failed: %s", esp_err_to_name(sensor_init_err));
@@ -1519,8 +1535,8 @@ void app_main(void) {
     // ============================================================
     // REDUCE LOGGING OUTPUT - Uncomment one of these lines:
     // ============================================================
-    esp_log_level_set("*", ESP_LOG_WARN);   // Show only warnings and errors
-    // esp_log_level_set("*", ESP_LOG_INFO);   // Show info, warnings and errors (for debugging)
+    // esp_log_level_set("*", ESP_LOG_WARN);   // Show only warnings and errors
+    esp_log_level_set("*", ESP_LOG_INFO);   // Show info, warnings and errors (for debugging)
     // esp_log_level_set("*", ESP_LOG_ERROR);  // Show only errors
     // esp_log_level_set("*", ESP_LOG_NONE);   // Turn off all logging
     
@@ -1617,7 +1633,13 @@ void app_main(void) {
             }
         }
         
+        // DIAGNOSTIC: Scan I2C bus to see what devices are connected
+        ESP_LOGI(TAG, "Running I2C bus diagnostic scan...");
+        i2c_scanner_scan_bus();
+        
         if (sensor_config_is_enabled(SENSOR_TYPE_BME680)) {
+            ESP_LOGI(TAG, "BME680 sensor is enabled, initializing...");
+            
             esp_err_t bme680_err = sensor_bme680_init();
             if (bme680_err == ESP_OK) {
                 ESP_LOGI(TAG, "BME680 sensor initialized successfully");

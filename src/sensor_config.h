@@ -12,6 +12,10 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include "esp_err.h"
+#include "driver/i2c_master.h"
+
+// Shared I2C bus handle (initialized by BH1750, used by other sensors)
+extern i2c_master_bus_handle_t i2c_bus_handle;
 
 // Maximum number of sensors supported
 #define MAX_SENSORS 10

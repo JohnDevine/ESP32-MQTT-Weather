@@ -3,11 +3,11 @@
 ## Overview
 This is an ESP32-based configurable sensor monitoring system for IoT applications. It provides a complete foundation for collecting data from multiple sensors and publishing it to MQTT. The system includes web-based configuration, over-the-air updates, and robust connectivity with automatic recovery features.
 
-**Key Feature**: Runtime configurable sensors! Enable/disable individual sensors through the web interface without code changes. Currently supports BH1750 light sensor with framework ready for BME680 and other sensors.
+**Key Feature**: Runtime configurable sensors! Enable/disable individual sensors through the web interface without code changes. Currently supports BH1750 light sensor and BME680 environmental sensor with framework ready for additional sensors.
 
 ## Features
 - **Configurable Sensor Support**: Runtime enable/disable of individual sensors through web interface
-- **Multiple Sensor Types**: BH1750 light sensor (implemented), BME680 environmental (framework ready)
+- **Multiple Sensor Types**: BH1750 light sensor (implemented), BME680 environmental (implemented)
 - **Individual MQTT Topics**: Each sensor publishes to its own configurable topic
 - **MQTT Publishing**: Automatic data publishing with configurable intervals
 - **Web Configuration**: Captive portal for easy WiFi, MQTT, and sensor setup
@@ -27,8 +27,18 @@ The BH1750 light sensor is fully implemented and ready to use:
 4. Configure MQTT topic (default: `sensors/light/bh1750`)
 5. Save and reboot - sensor data will be published automatically
 
+### Quick Start with BME680
+The BME680 environmental sensor is fully implemented and ready to use:
+1. Connect BME680 to ESP32 (VCC->3.3V, GND->GND, SDA->GPIO21, SCL->GPIO22, SDO->GND)
+2. Flash the firmware and enter configuration mode (hold boot button during power-on)
+3. Enable BME680 sensor in the web interface
+4. Configure MQTT topic (default: `sensors/environment/bme680`)
+5. Save and reboot - sensor data will be published automatically
+
+**Note**: BME680 uses I2C address 0x76 (SDO pin connected to GND). Both sensors share the same I2C bus without conflicts.
+
 ### Adding More Sensors
-The framework supports easy addition of new sensors. BME680 framework is ready for implementation.
+The framework supports easy addition of new sensors. BME680 environmental sensor is now fully implemented alongside BH1750.
 Search for "TEMPLATE:" comments in the source code to find areas that need customization:
 - **Sensor Configuration**: Pin assignments and communication protocol setup
 - **Data Structure**: Define your sensor-specific data fields
@@ -40,15 +50,37 @@ Search for "TEMPLATE:" comments in the source code to find areas that need custo
 This project includes a configurable sensor system with runtime enable/disable:
 
 ### Currently Implemented
-- **BH1750**: Light sensor (I2C) - fully implemented and ready to use
+- **BH1750**: Light sensor (I2C) - fully implemented with responsive readings
   - Default topic: `sensors/light/bh1750`  
-  - Data: Light intensity in lux
+  - Data: Light intensity in lux with real-time responsiveness
+  - Implementation: One-time measurement mode for accurate readings
   - Configuration: Enable/disable via web interface
 
-### Framework Ready (Implementation Needed)
-- **BME680**: Environmental sensor (I2C/SPI) - stub implementation provided
-  - Temperature, humidity, pressure, gas resistance
+- **BME680**: Environmental sensor (I2C) - fully implemented for environmental monitoring
   - Default topic: `sensors/environment/bme680`
+  - Data: Temperature (°C), humidity (%), pressure (hPa) 
+  - Gas sensor: Basic resistance reading (advanced gas analysis via BSEC library - see enhancement below)
+  - Configuration: Enable/disable via web interface
+
+> **🚀 Future Enhancement - BSEC Library Integration**
+> 
+> **TODO**: Consider implementing Bosch BSEC (Bosch Sensortec Environmental Cluster) library for advanced BME680 gas sensor functionality.
+> 
+> **Benefits of BSEC Integration:**
+> - **Professional Air Quality Monitoring**: Indoor Air Quality (IAQ) index (0-500 scale)
+> - **Advanced Gas Analysis**: CO₂ equivalent and VOC equivalent measurements  
+> - **Intelligent Calibration**: Self-calibrating algorithms with baseline management
+> - **Breath VOC Detection**: Enhanced volatile organic compound detection
+> - **Static IAQ Assessment**: Air quality without motion dependency
+> - **Accuracy Enhancement**: Professional-grade sensor fusion algorithms
+> 
+> **Implementation Complexity**: Moderate (6/10) - requires proprietary library integration, calibration system, and extended testing period for baseline establishment.
+> 
+> **Estimated Benefits**: Transform basic environmental monitoring into professional-grade air quality assessment suitable for smart home automation, health monitoring, and industrial applications.
+> 
+> **Target Applications**: Smart HVAC control, indoor air quality alerts, health monitoring systems, building automation with air quality-based ventilation control.
+
+### Framework Ready (Implementation Needed)
 
 ### Easily Adaptable For
 - **DHT22**: Temperature and humidity sensor (GPIO)
@@ -62,9 +94,11 @@ See [SENSOR_CONFIGURATION.md](SENSOR_CONFIGURATION.md) for detailed sensor addit
 
 ## Hardware Components
 - **ESP32 Development Board** (tested with ESP32 DevKit V1)
-- **Sensor Module(s)** (customize based on your needs)
+- **BH1750 Light Sensor** (optional, I2C interface)
+- **BME680 Environmental Sensor** (optional, I2C interface) 
+- **Other Sensor Modules** (customize based on your needs)
 - **Power Supply**: 5V USB or 3.3V-5V power source
-- **Pull-up resistors**: 4.7kΩ for I2C sensors (if needed)
+- **Pull-up resistors**: 4.7kΩ for I2C sensors (usually built-in on sensor modules)
 
 ## Default Pin Configuration (Customizable)
 | Function      | ESP32 Pin     | Purpose                           |
@@ -108,7 +142,7 @@ The ESP32 publishes sensor data in JSON format to the configured MQTT topic. The
       "temperature": 25.2,
       "humidity": 65.5,
       "pressure": 1013.25,
-      "gas_resistance": 50000
+      "gas_resistance": 0
     }
     // Additional sensors will be added here as they are enabled
   }
@@ -189,18 +223,27 @@ sensor:
     unit_of_measurement: "lx"
     availability_template: "{{ 'online' if value_json.sensors.bh1750.valid else 'offline' }}"
     
-  # BME680 Environmental Sensor (when implemented)
+  # BME680 Environmental Sensor
   - platform: mqtt
     name: "ESP32 Temperature"
     state_topic: "sensors/data"
     value_template: "{{ value_json.sensors.bme680.temperature if value_json.sensors.bme680 else 'unavailable' }}"
     unit_of_measurement: "°C"
+    availability_template: "{{ 'online' if value_json.sensors.bme680.valid else 'offline' }}"
     
   - platform: mqtt
     name: "ESP32 Humidity"
     state_topic: "sensors/data"
     value_template: "{{ value_json.sensors.bme680.humidity if value_json.sensors.bme680 else 'unavailable' }}"
     unit_of_measurement: "%"
+    availability_template: "{{ 'online' if value_json.sensors.bme680.valid else 'offline' }}"
+    
+  - platform: mqtt
+    name: "ESP32 Pressure"
+    state_topic: "sensors/data"
+    value_template: "{{ value_json.sensors.bme680.pressure if value_json.sensors.bme680 else 'unavailable' }}"
+    unit_of_measurement: "hPa"
+    availability_template: "{{ 'online' if value_json.sensors.bme680.valid else 'offline' }}"
     
   # System Information
   - platform: mqtt
@@ -228,7 +271,7 @@ binary_sensor:
 ```influxdb
 # Combined sensor data - parse JSON and create multiple measurements
 sensor_data,device=ESP32-Sensor,sensor=bh1750 lux=1250.5,valid=1 1642234567890000000
-sensor_data,device=ESP32-Sensor,sensor=bme680 temperature=25.2,humidity=65.5,pressure=1013.25,gas_resistance=50000,valid=1 1642234567890000000
+sensor_data,device=ESP32-Sensor,sensor=bme680 temperature=25.2,humidity=65.5,pressure=1013.25,gas_resistance=0,valid=1 1642234567890000000
 system_data,device=ESP32-Sensor wifi_rssi=75,cpu_temp=32.0,wdt_restarts=2 1642234567890000000
 ```
 
