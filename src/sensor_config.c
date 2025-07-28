@@ -85,6 +85,14 @@ static const sensor_config_t default_configs[SENSOR_TYPE_MAX_COUNT] = {
         .name = "TSL2561 Light Sensor",
         .mqtt_topic = "sensors/light/tsl2561",
         .sample_interval_ms = 0
+    },
+    // Wind Speed Sensor
+    {
+        .type = SENSOR_TYPE_WIND_SPEED,
+        .enabled = false,
+        .name = "SN-3000 Wind Speed",
+        .mqtt_topic = "sensors/weather/wind_speed",
+        .sample_interval_ms = 0
     }
 };
 
@@ -347,6 +355,9 @@ esp_err_t sensor_read_all_enabled(void) {
             case SENSOR_TYPE_BME680:
                 result = sensor_bme680_read(&data);
                 break;
+            case SENSOR_TYPE_WIND_SPEED:
+                result = sensor_wind_speed_read(&data);
+                break;
             default:
                 ESP_LOGW(TAG, "Sensor type %d reading not implemented", i);
                 continue;
@@ -437,6 +448,15 @@ char* sensor_data_to_json(sensor_type_t type, const sensor_data_t* data) {
                 cJSON_AddNumberToObject(sensor_data_obj, "lux", data->data.tsl2561.lux);
                 cJSON_AddNumberToObject(sensor_data_obj, "visible", data->data.tsl2561.visible);
                 cJSON_AddNumberToObject(sensor_data_obj, "infrared", data->data.tsl2561.infrared);
+            }
+            break;
+            
+        case SENSOR_TYPE_WIND_SPEED:
+            if (data->valid) {
+                cJSON_AddNumberToObject(sensor_data_obj, "wind_speed", data->data.wind_speed.wind_speed);
+                cJSON_AddNumberToObject(sensor_data_obj, "wind_speed_avg", data->data.wind_speed.wind_speed_avg);
+                cJSON_AddNumberToObject(sensor_data_obj, "wind_gust", data->data.wind_speed.wind_gust);
+                cJSON_AddNumberToObject(sensor_data_obj, "raw_reading", data->data.wind_speed.raw_reading);
             }
             break;
             

@@ -19,7 +19,7 @@
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
-  "id": 12,
+  "id": 16,
   "links": [],
   "panels": [
     {
@@ -196,13 +196,13 @@
       "options": {
         "legend": {
           "calcs": [
-            "lastNotNull",
             "min",
             "max",
-            "mean"
+            "range",
+            "last"
           ],
           "displayMode": "table",
-          "placement": "right",
+          "placement": "bottom",
           "showLegend": true
         },
         "tooltip": {
@@ -347,8 +347,6 @@
           "decimals": 1,
           "displayName": "${__field.labels.site_name} - ${__field.labels.device_id}",
           "mappings": [],
-          "max": 100,
-          "min": 0,
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -375,13 +373,13 @@
       "options": {
         "legend": {
           "calcs": [
-            "lastNotNull",
             "min",
             "max",
-            "mean"
+            "range",
+            "last"
           ],
           "displayMode": "table",
-          "placement": "right",
+          "placement": "bottom",
           "showLegend": true
         },
         "tooltip": {
@@ -522,8 +520,6 @@
           "decimals": 1,
           "displayName": "${__field.labels.site_name} - ${__field.labels.device_id}",
           "mappings": [],
-          "max": 1050,
-          "min": 950,
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -550,13 +546,13 @@
       "options": {
         "legend": {
           "calcs": [
-            "lastNotNull",
             "min",
             "max",
-            "mean"
+            "range",
+            "last"
           ],
           "displayMode": "table",
-          "placement": "right",
+          "placement": "bottom",
           "showLegend": true
         },
         "tooltip": {
@@ -733,13 +729,13 @@
       "options": {
         "legend": {
           "calcs": [
-            "lastNotNull",
             "min",
             "max",
-            "mean"
+            "range",
+            "last"
           ],
           "displayMode": "table",
-          "placement": "right",
+          "placement": "bottom",
           "showLegend": true
         },
         "tooltip": {
@@ -757,10 +753,416 @@
       ],
       "title": "Light Level Over Time",
       "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "eerly85rktxq8d"
+      },
+      "description": "Latest wind speed reading from selected device.\n\n**Wind Speed Reference Table**\n\n| Wind Speed (knots) | Description         | Sailor’s Term                | Typical Action                                                      |\n|--------------------|---------------------|------------------------------|---------------------------------------------------------------------|\n| 0–3                | Calm                | Drifter                      | Often no steerage way under sail; may need engine                    |\n| 4–8                | Light breeze        | Gentle/Drifting              | Light air sails or genoa; slow but pleasant                         |\n| 9–14               | Moderate breeze     | Pleasant Sailing             | Ideal cruising; full sails up                                       |\n| 15–20              | Fresh breeze        | Lively                       | Reef main or reduce headsail if needed                              |\n| 21–25              | Strong breeze       | Challenging                  | One or more reefs, skilled handling                                 |\n| 26–33              | Near gale           | Rough/Heavy Weather          | Deep reefs, storm tactics, skilled crew essential                   |\n| 34–47              | Gale to strong gale | Storm/Cyclonic Conditions    | Storm sails, heaving-to, possibly unsafe                            |\n\nNote: This table is for reference only. Always use your best judgment and consider local conditions.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "decimals": 1,
+          "displayName": "${__field.labels.site_name} - ${__field.labels.device_id}",
+          "mappings": [],
+          "max": 30,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              },
+              {
+                "color": "yellow",
+                "value": 5
+              },
+              {
+                "color": "orange",
+                "value": 10
+              },
+              {
+                "color": "red",
+                "value": 15
+              },
+              {
+                "color": "dark-red",
+                "value": 20
+              }
+            ]
+          },
+          "unit": "knots"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 3,
+        "x": 0,
+        "y": 21
+      },
+      "id": 9,
+      "options": {
+        "minVizHeight": 75,
+        "minVizWidth": 75,
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showThresholdLabels": true,
+        "showThresholdMarkers": true,
+        "sizing": "auto"
+      },
+      "pluginVersion": "12.0.2",
+      "targets": [
+        {
+          "query": "from(bucket: \"Weather\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"Readings\")\n  |> filter(fn: (r) => r[\"device_type\"] == \"weather\")\n  |> filter(fn: (r) => r[\"site_name\"] == \"${site_name}\")\n  |> filter(fn: (r) => r[\"device_id\"] =~ /^(${device_id:regex})$/)\n  |> filter(fn: (r) => r[\"_field\"] == \"wind_speed_instantaneous\")\n  |> last()\n  |> map(fn: (r) => ({ r with _value: r._value * 1.94384 }))\n  |> yield(name: \"current_wind_speed_knots\")",
+          "refId": "A"
+        }
+      ],
+      "title": "Current Wind Speed",
+      "type": "gauge"
+    },
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "eerly85rktxq8d"
+      },
+      "description": "Wind speed readings from selected weather devices including instantaneous, average, and gust measurements.\n\n**Wind Speed Reference Table**\n\n| Wind Speed (knots) | Description         | Sailor’s Term                | Typical Action                                                      |\n|--------------------|---------------------|------------------------------|---------------------------------------------------------------------|\n| 0–3                | Calm                | Drifter                      | Often no steerage way under sail; may need engine                    |\n| 4–8                | Light breeze        | Gentle/Drifting              | Light air sails or genoa; slow but pleasant                         |\n| 9–14               | Moderate breeze     | Pleasant Sailing             | Ideal cruising; full sails up                                       |\n| 15–20              | Fresh breeze        | Lively                       | Reef main or reduce headsail if needed                              |\n| 21–25              | Strong breeze       | Challenging                  | One or more reefs, skilled handling                                 |\n| 26–33              | Near gale           | Rough/Heavy Weather          | Deep reefs, storm tactics, skilled crew essential                   |\n| 34–47              | Gale to strong gale | Storm/Cyclonic Conditions    | Storm sails, heaving-to, possibly unsafe                            |\n\nNote: This table is for reference only. Always use your best judgment and consider local conditions.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "Wind Speed (m/s)",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "decimals": 1,
+          "displayName": "${__field.labels.site_name} - ${__field.labels.device_id} - ${__field.name}",
+          "mappings": [],
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              },
+              {
+                "color": "red",
+                "value": 20
+              }
+            ]
+          },
+          "unit": "knots"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "wind_gust"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "red",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "wind_speed_average"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "blue",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "wind_speed_instantaneous"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "green",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 21,
+        "x": 3,
+        "y": 21
+      },
+      "id": 10,
+      "options": {
+        "legend": {
+          "calcs": [
+            "min",
+            "max",
+            "range",
+            "last"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.0.2",
+      "targets": [
+        {
+          "alias": "Instantaneous",
+          "query": "from(bucket: \"Weather\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"Readings\")\n  |> filter(fn: (r) => r[\"device_type\"] == \"weather\")\n  |> filter(fn: (r) => r[\"site_name\"] == \"${site_name}\")\n  |> filter(fn: (r) => r[\"device_id\"] =~ /^(${device_id:regex})$/)\n  |> filter(fn: (r) => r[\"_field\"] == \"wind_speed_instantaneous\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> map(fn: (r) => ({ r with _value: r._value * 1.94384 }))\n  |> yield(name: \"wind_speed_instantaneous_knots\")",
+          "refId": "A"
+        },
+        {
+          "alias": "Average",
+          "query": "from(bucket: \"Weather\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"Readings\")\n  |> filter(fn: (r) => r[\"device_type\"] == \"weather\")\n  |> filter(fn: (r) => r[\"site_name\"] == \"${site_name}\")\n  |> filter(fn: (r) => r[\"device_id\"] =~ /^(${device_id:regex})$/)\n  |> filter(fn: (r) => r[\"_field\"] == \"wind_speed_average\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> map(fn: (r) => ({ r with _value: r._value * 1.94384 }))\n  |> yield(name: \"wind_speed_average_knots\")",
+          "refId": "B"
+        },
+        {
+          "alias": "Gust",
+          "query": "from(bucket: \"Weather\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"Readings\")\n  |> filter(fn: (r) => r[\"device_type\"] == \"weather\")\n  |> filter(fn: (r) => r[\"site_name\"] == \"${site_name}\")\n  |> filter(fn: (r) => r[\"device_id\"] =~ /^(${device_id:regex})$/)\n  |> filter(fn: (r) => r[\"_field\"] == \"wind_gust\")\n  |> aggregateWindow(every: v.windowPeriod, fn: max, createEmpty: false)\n  |> map(fn: (r) => ({ r with _value: r._value * 1.94384 }))\n  |> yield(name: \"wind_gust_knots\")",
+          "refId": "C"
+        }
+      ],
+      "title": "Wind Speed Over Time",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "eerly85rktxq8d"
+      },
+      "description": "Latest wind gust reading from selected device",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "decimals": 1,
+          "displayName": "${__field.labels.site_name} - ${__field.labels.device_id}",
+          "mappings": [],
+          "max": 40,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              },
+              {
+                "color": "yellow",
+                "value": 8
+              },
+              {
+                "color": "orange",
+                "value": 15
+              },
+              {
+                "color": "red",
+                "value": 25
+              },
+              {
+                "color": "dark-red",
+                "value": 30
+              }
+            ]
+          },
+          "unit": "knots"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 3,
+        "x": 0,
+        "y": 27
+      },
+      "id": 11,
+      "options": {
+        "minVizHeight": 75,
+        "minVizWidth": 75,
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showThresholdLabels": true,
+        "showThresholdMarkers": true,
+        "sizing": "auto"
+      },
+      "pluginVersion": "12.0.2",
+      "targets": [
+        {
+          "query": "from(bucket: \"Weather\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"Readings\")\n  |> filter(fn: (r) => r[\"device_type\"] == \"weather\")\n  |> filter(fn: (r) => r[\"site_name\"] == \"${site_name}\")\n  |> filter(fn: (r) => r[\"device_id\"] =~ /^(${device_id:regex})$/)\n  |> filter(fn: (r) => r[\"_field\"] == \"wind_gust\")\n  |> last()\n  |> map(fn: (r) => ({ r with _value: r._value * 1.94384 }))\n  |> yield(name: \"current_wind_gust_knots\")",
+          "refId": "A"
+        }
+      ],
+      "title": "Current Wind Gust",
+      "type": "gauge"
+    },
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "eerly85rktxq8d"
+      },
+      "description": "Raw wind sensor readings and diagnostic information",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "Raw Reading",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "decimals": 0,
+          "displayName": "${__field.labels.site_name} - ${__field.labels.device_id}",
+          "mappings": [],
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              },
+              {
+                "color": "red",
+                "value": 600
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 21,
+        "x": 3,
+        "y": 27
+      },
+      "id": 12,
+      "options": {
+        "legend": {
+          "calcs": [
+            "min",
+            "max",
+            "range",
+            "last"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.0.2",
+      "targets": [
+        {
+          "query": "from(bucket: \"Weather\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"Readings\")\n  |> filter(fn: (r) => r[\"device_type\"] == \"weather\")\n  |> filter(fn: (r) => r[\"site_name\"] == \"${site_name}\")\n  |> filter(fn: (r) => r[\"device_id\"] =~ /^(${device_id:regex})$/)\n  |> filter(fn: (r) => r[\"_field\"] == \"wind_raw_reading\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> yield(name: \"wind_raw_reading\")",
+          "refId": "A"
+        }
+      ],
+      "title": "Wind Sensor Raw Reading",
+      "type": "timeseries"
     }
   ],
   "preload": false,
-  "refresh": "5s",
   "schemaVersion": 41,
   "tags": [],
   "templating": {
@@ -809,12 +1211,12 @@
     ]
   },
   "time": {
-    "from": "now-6h",
+    "from": "now-30m",
     "to": "now"
   },
   "timepicker": {},
   "timezone": "browser",
   "title": "Weather",
   "uid": "709e976a-de91-4d01-9a41-9bca394bb7ed",
-  "version": 18
+  "version": 3
 }

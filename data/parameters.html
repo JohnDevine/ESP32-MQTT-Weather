@@ -226,6 +226,28 @@
                         Note: BME280 implementation not yet added. Enable for future use.
                     </div>
                 </div>
+                
+                <!-- Wind Speed Sensor -->
+                <div style="border: 1px solid #e0e0e0; border-radius: 8px; padding: 1em; margin-bottom: 1em;">
+                    <label style="display: flex; align-items: center; margin-bottom: 0.5em;">
+                        <input type="checkbox" name="sensor_wind_speed_enabled" id="sensor_wind_speed_enabled" style="margin-right: 0.5em;">
+                        <strong>SN-3000-FSJT-N01 Wind Speed Sensor</strong>
+                    </label>
+                    <label style="margin-top: 0.5em;">Sensor Name:
+                        <input type="text" name="sensor_wind_speed_name" id="sensor_wind_speed_name" value="SN-3000 Wind Speed" maxlength="31" placeholder="Custom sensor name">
+                    </label>
+                    <div style="margin-top: 0.8em;">
+                        <label style="display: block; margin-bottom: 0.3em;">Reading Interval (ms):
+                            <input type="number" name="wind_reading_interval_ms" id="wind_reading_interval_ms" value="2000" min="100" max="60000" style="width: 100px;">
+                        </label>
+                        <label style="display: block; margin-bottom: 0.3em;">Average Period (ms):
+                            <input type="number" name="wind_avg_period_ms" id="wind_avg_period_ms" value="60000" min="1000" max="600000" style="width: 100px;">
+                        </label>
+                        <label style="display: block; margin-bottom: 0.3em;">Gust Period (ms):
+                            <input type="number" name="wind_gust_period_ms" id="wind_gust_period_ms" value="300000" min="1000" max="1800000" style="width: 100px;">
+                        </label>
+                    </div>
+                </div>
             </div>
             
             <button type="submit">Save & Reboot</button>
@@ -324,6 +346,23 @@
                 if (cfg.sensors.bme280) {
                     document.getElementById('sensor_bme280_enabled').checked = cfg.sensors.bme280.enabled || false;
                 }
+                
+                // Wind Speed Sensor
+                if (cfg.sensors.wind_speed) {
+                    document.getElementById('sensor_wind_speed_enabled').checked = cfg.sensors.wind_speed.enabled || false;
+                    document.getElementById('sensor_wind_speed_name').value = cfg.sensors.wind_speed.name || 'SN-3000 Wind Speed';
+                }
+            }
+            
+            // Load wind speed configuration if available
+            if (cfg.wind_reading_interval_ms !== undefined) {
+                document.getElementById('wind_reading_interval_ms').value = cfg.wind_reading_interval_ms || 2000;
+            }
+            if (cfg.wind_avg_period_ms !== undefined) {
+                document.getElementById('wind_avg_period_ms').value = cfg.wind_avg_period_ms || 60000;
+            }
+            if (cfg.wind_gust_period_ms !== undefined) {
+                document.getElementById('wind_gust_period_ms').value = cfg.wind_gust_period_ms || 300000;
             }
         }).catch(err => {
             console.log('Error fetching params.json: ' + err.message);

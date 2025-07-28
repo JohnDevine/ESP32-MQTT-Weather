@@ -30,6 +30,7 @@ typedef enum {
     SENSOR_TYPE_BME280 = 5,    // Temperature, humidity, pressure sensor
     SENSOR_TYPE_SHT30 = 6,     // Temperature and humidity sensor
     SENSOR_TYPE_TSL2561 = 7,   // Light sensor
+    SENSOR_TYPE_WIND_SPEED = 8, // Wind speed sensor (SN-3000-FSJT-N01, RS485)
     SENSOR_TYPE_MAX_COUNT      // Keep this last - indicates max sensor types
 } sensor_type_t;
 
@@ -91,6 +92,13 @@ typedef struct {
             uint16_t visible;        // Visible light
             uint16_t infrared;       // Infrared light
         } tsl2561;
+        
+        struct {                     // Wind Speed Sensor (SN-3000-FSJT-N01)
+            float wind_speed;        // Current instantaneous wind speed (m/s)
+            float wind_speed_avg;    // Rolling average wind speed (m/s)
+            float wind_gust;         // Rolling maximum gust speed (m/s)
+            uint16_t raw_reading;    // Raw Modbus register value
+        } wind_speed;
     } data;
 } sensor_data_t;
 
@@ -121,6 +129,14 @@ bool bh1750_is_initialized(void);
 esp_err_t sensor_bme680_init(void);
 esp_err_t sensor_bme680_read(sensor_data_t* data);
 bool bme680_is_initialized(void);
+
+esp_err_t sensor_wind_speed_init(void);
+esp_err_t sensor_wind_speed_read(sensor_data_t* data);
+bool wind_speed_is_initialized(void);
+
+// Wind speed configuration functions
+esp_err_t sensor_wind_speed_set_config(uint32_t reading_interval_ms, uint32_t avg_period_ms, uint32_t gust_period_ms);
+esp_err_t sensor_wind_speed_get_config(uint32_t* reading_interval_ms, uint32_t* avg_period_ms, uint32_t* gust_period_ms);
 
 // I2C bus management (for sharing between sensors)
 #include "driver/i2c_master.h"

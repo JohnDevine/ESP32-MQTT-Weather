@@ -3,11 +3,11 @@
 ## Overview
 This is an ESP32-based configurable sensor monitoring system for IoT applications. It provides a complete foundation for collecting data from multiple sensors and publishing it to MQTT. The system includes web-based configuration, over-the-air updates, and robust connectivity with automatic recovery features.
 
-**Key Feature**: Runtime configurable sensors! Enable/disable individual sensors through the web interface without code changes. Currently supports BH1750 light sensor and BME680 environmental sensor with framework ready for additional sensors.
+**Key Feature**: Runtime configurable sensors! Enable/disable individual sensors through the web interface without code changes. Currently supports BH1750 light sensor, BME680 environmental sensor, and SN-3000-FSJT-N01 wind speed sensor with framework ready for additional sensors.
 
 ## Features
 - **Configurable Sensor Support**: Runtime enable/disable of individual sensors through web interface
-- **Multiple Sensor Types**: BH1750 light sensor (implemented), BME680 environmental (implemented)
+- **Multiple Sensor Types**: BH1750 light sensor, BME680 environmental sensor, SN-3000-FSJT-N01 wind speed sensor
 - **Individual MQTT Topics**: Each sensor publishes to its own configurable topic
 - **MQTT Publishing**: Automatic data publishing with configurable intervals
 - **Web Configuration**: Captive portal for easy WiFi, MQTT, and sensor setup
@@ -22,7 +22,7 @@ This is an ESP32-based configurable sensor monitoring system for IoT application
 ### Quick Start with BH1750
 The BH1750 light sensor is fully implemented and ready to use:
 1. Connect BH1750 to ESP32 (VCC->3.3V, GND->GND, SDA->GPIO21, SCL->GPIO22)
-2. Flash the firmware and enter configuration mode (hold boot button during power-on)
+2. Flash the firmware and enter configuration mode (after booting press boot button within 10 seconds)
 3. Enable BH1750 sensor in the web interface
 4. Configure MQTT topic (default: `sensors/light/bh1750`)
 5. Save and reboot - sensor data will be published automatically
@@ -30,12 +30,22 @@ The BH1750 light sensor is fully implemented and ready to use:
 ### Quick Start with BME680
 The BME680 environmental sensor is fully implemented and ready to use:
 1. Connect BME680 to ESP32 (VCC->3.3V, GND->GND, SDA->GPIO21, SCL->GPIO22, SDO->GND)
-2. Flash the firmware and enter configuration mode (hold boot button during power-on)
+2. Flash the firmware and enter configuration mode (after booting press boot button within 10 seconds)
 3. Enable BME680 sensor in the web interface
 4. Configure MQTT topic (default: `sensors/environment/bme680`)
 5. Save and reboot - sensor data will be published automatically
 
 **Note**: BME680 uses I2C address 0x76 (SDO pin connected to GND). Both sensors share the same I2C bus without conflicts.
+
+### Quick Start with SN-3000-FSJT-N01 Wind Speed Sensor
+The SN-3000-FSJT-N01 wind speed sensor is fully implemented and ready to use:
+1. Connect wind sensor to 12V power supply and MAX485 converter to ESP32 (TX->GPIO17, RX->GPIO16, DE/RE->GPIO4)
+2. Flash the firmware and enter configuration mode (after booting press boot button within 10 seconds)
+3. Enable wind speed sensor in the web interface
+4. Configure MQTT topic (default: `sensors/site_name/weather/device_id`)
+5. Save and reboot - sensor data will be published automatically
+
+**Note**: Wind sensor requires 12V power supply and MAX485 RS485-to-TTL converter. See `ESP32_WindSensor_MAX485_Wiring.md` for complete wiring diagram.
 
 ### Adding More Sensors
 The framework supports easy addition of new sensors. BME680 environmental sensor is now fully implemented alongside BH1750.
@@ -61,6 +71,13 @@ This project includes a configurable sensor system with runtime enable/disable:
   - Data: Temperature (°C), humidity (%), pressure (hPa) 
   - Gas sensor: Basic resistance reading (advanced gas analysis via BSEC library - see enhancement below)
   - Configuration: Enable/disable via web interface
+
+- **SN-3000-FSJT-N01**: Wind speed sensor (RS485/Modbus RTU) - fully implemented for weather monitoring
+  - Default topic: `sensors/site_name/weather/device_id`
+  - Data: Instantaneous wind speed, rolling average, gust detection, raw sensor values
+  - Protocol: Modbus RTU over RS485 at 4800 baud
+  - Configuration: Enable/disable via web interface with configurable timing parameters
+  - Hardware: Requires MAX485 TTL-to-RS485 converter module
 
 > **🚀 Future Enhancement - BSEC Library Integration**
 > 
@@ -96,17 +113,22 @@ See [SENSOR_CONFIGURATION.md](SENSOR_CONFIGURATION.md) for detailed sensor addit
 - **ESP32 Development Board** (tested with ESP32 DevKit V1)
 - **BH1750 Light Sensor** (optional, I2C interface)
 - **BME680 Environmental Sensor** (optional, I2C interface) 
+- **SN-3000-FSJT-N01 Wind Speed Sensor** (optional, RS485/Modbus RTU interface)
+- **MAX485 TTL-to-RS485 Converter** (required for wind speed sensor)
 - **Other Sensor Modules** (customize based on your needs)
-- **Power Supply**: 5V USB or 3.3V-5V power source
+- **Power Supply**: 5V USB or 3.3V-5V power source (12V for wind sensor)
 - **Pull-up resistors**: 4.7kΩ for I2C sensors (usually built-in on sensor modules)
 
 ## Default Pin Configuration (Customizable)
 | Function      | ESP32 Pin     | Purpose                           |
 |---------------|---------------|-----------------------------------|
-| I2C SCL       | GPIO22        | I2C Clock (if using I2C sensors) |
-| I2C SDA       | GPIO21        | I2C Data (if using I2C sensors)  |
-| Status LED    | GPIO2         | System status and MQTT heartbeat |
-| Boot Button   | GPIO0         | Enter configuration mode          |
+| I2C SCL       | GPIO22 (D22)  | I2C Clock (if using I2C sensors) |
+| I2C SDA       | GPIO21 (D21)  | I2C Data (if using I2C sensors)  |
+| Status LED    | GPIO2 (D2)    | System status and MQTT heartbeat |
+| Boot Button   | GPIO0 (D0)    | Enter configuration mode          |
+| Wind TX       | GPIO17 (D17)  | UART2 TX for MAX485 converter    |
+| Wind RX       | GPIO16 (D16)  | UART2 RX for MAX485 converter    |
+| Wind DE/RE    | GPIO4 (D4)    | MAX485 Direction Enable/Receive Enable |
 
 **Note**: Pin assignments can be changed in the source code based on your sensor requirements.
 
@@ -143,6 +165,15 @@ The ESP32 publishes sensor data in JSON format to the configured MQTT topic. The
       "humidity": 65.5,
       "pressure": 1013.25,
       "gas_resistance": 0
+    },
+    "wind_speed": {                    // SN-3000-FSJT-N01 wind speed sensor (if enabled)
+      "name": "SN-3000 Wind Speed",
+      "valid": true,
+      "timestamp": 12345,
+      "instantaneous": 5.2,
+      "average": 4.8,
+      "gust": 7.1,
+      "raw_reading": 52
     }
     // Additional sensors will be added here as they are enabled
   }
@@ -177,7 +208,7 @@ Each enabled sensor appears as a separate object within the "sensors" section:
 1. **Hardware Connection**: Wire your sensor(s) to ESP32 according to your sensor's requirements
 2. **Power On**: Connect ESP32 to power source via USB
 3. **Configuration Mode**: 
-   - Hold the boot button (GPIO0) during power-on for 10 seconds
+   - After booting you have 10 seconds to press the boot button (GPIO0)
    - ESP32 will create a WiFi access point named "ESP32-CONFIG-XXXX"
 4. **Web Configuration**:
    - Connect to the ESP32 access point
@@ -190,13 +221,40 @@ Each enabled sensor appears as a separate object within the "sensors" section:
 - **WiFi SSID/Password**: Network credentials for internet connectivity
 - **MQTT Broker URL**: MQTT server address (e.g., mqtt://192.168.1.100)
 - **Data Topic**: MQTT topic for sensor data publishing
-- **Sample Interval**: Time between sensor readings (milliseconds)
+- **Sample Interval**: Time between sensor data being read and sent to MQTT (milliseconds)
 
 ### Web Interface Features
 - **System Information**: View current configuration and system status
 - **OTA Updates**: Upload new firmware or file system images
 - **Configuration Export**: Download current settings as JSON
-- **Reset Options**: Factory reset or watchdog counter reset
+- **Reset Options**: Watchdog counter reset
+
+### Wind Speed Sensor Technical Details
+The SN-3000-FSJT-N01 wind speed sensor communicates via Modbus RTU protocol over RS485. A MAX485 converter is required to interface with the ESP32's UART pins.
+
+**Technical Specifications:**
+- **Communication**: Modbus RTU over RS485
+- **Baud Rate**: 4800, 8N1
+- **Device Address**: 0x01
+- **Register**: 0x0000 (wind speed data)
+- **Power**: 12V DC
+- **Output Range**: 0-60 m/s
+
+**Data Format:**
+The sensor publishes four types of wind speed data in the MQTT payload:
+- `instantaneous`: Current wind speed reading (m/s)
+- `average`: Rolling average over configured period (m/s)
+- `gust`: Maximum wind speed detected in period (m/s)
+- `raw_reading`: Raw 16-bit Modbus register value (divide by 10 to get m/s)
+
+**Hardware Connections:**
+- Wind sensor 12V power supply
+- RS485 A/B differential pair to MAX485
+- MAX485 to ESP32: RX→GPIO16, TX→GPIO17, DE/RE→GPIO4
+- See `ESP32_WindSensor_MAX485_Wiring.md` for complete wiring diagram
+
+**Configuration:**
+The wind sensor can be enabled/disabled and configured through the web interface at `/parameters`. Rolling buffer settings allow customization of averaging periods and gust detection sensitivity.
 
 ## Applications and Use Cases
 This configurable sensor system can be adapted for various IoT monitoring applications:
@@ -245,6 +303,28 @@ sensor:
     unit_of_measurement: "hPa"
     availability_template: "{{ 'online' if value_json.sensors.bme680.valid else 'offline' }}"
     
+  # SN-3000-FSJT-N01 Wind Speed Sensor
+  - platform: mqtt
+    name: "ESP32 Wind Speed"
+    state_topic: "sensors/data"
+    value_template: "{{ value_json.sensors.wind_speed.instantaneous if value_json.sensors.wind_speed else 'unavailable' }}"
+    unit_of_measurement: "m/s"
+    availability_template: "{{ 'online' if value_json.sensors.wind_speed.valid else 'offline' }}"
+    
+  - platform: mqtt
+    name: "ESP32 Wind Speed Average"
+    state_topic: "sensors/data"
+    value_template: "{{ value_json.sensors.wind_speed.average if value_json.sensors.wind_speed else 'unavailable' }}"
+    unit_of_measurement: "m/s"
+    availability_template: "{{ 'online' if value_json.sensors.wind_speed.valid else 'offline' }}"
+    
+  - platform: mqtt
+    name: "ESP32 Wind Gust"
+    state_topic: "sensors/data"
+    value_template: "{{ value_json.sensors.wind_speed.gust if value_json.sensors.wind_speed else 'unavailable' }}"
+    unit_of_measurement: "m/s"
+    availability_template: "{{ 'online' if value_json.sensors.wind_speed.valid else 'offline' }}"
+    
   # System Information
   - platform: mqtt
     name: "ESP32 WiFi Signal"
@@ -272,6 +352,7 @@ binary_sensor:
 # Combined sensor data - parse JSON and create multiple measurements
 sensor_data,device=ESP32-Sensor,sensor=bh1750 lux=1250.5,valid=1 1642234567890000000
 sensor_data,device=ESP32-Sensor,sensor=bme680 temperature=25.2,humidity=65.5,pressure=1013.25,gas_resistance=0,valid=1 1642234567890000000
+sensor_data,device=ESP32-Sensor,sensor=wind_speed instantaneous=5.2,average=4.8,gust=7.1,raw_reading=52,valid=1 1642234567890000000
 system_data,device=ESP32-Sensor wifi_rssi=75,cpu_temp=32.0,wdt_restarts=2 1642234567890000000
 ```
 
@@ -366,7 +447,7 @@ E (xxxxx) mqtt_client: Error transport connect
 - **URL Format**: Use IP address instead of hostname if DNS issues suspected
 
 #### Web Interface Not Accessible
-- **Configuration Mode**: Hold boot button during power-on for 10 seconds
+- **Configuration Mode**: After booting you have 10 seconds to press the boot button
 - **AP Mode**: Look for "ESP32-CONFIG-XXXX" WiFi network
 - **Browser Issues**: Try different browser or clear cache
 - **Firewall**: Disable firewall/antivirus temporarily
@@ -377,18 +458,14 @@ E (xxxxx) mqtt_client: Error transport connect
 - **LED Indicator**: GPIO2 LED blinks on successful MQTT publish
 - **Watchdog Counter**: Monitor restart count for stability issues
 
-### Factory Reset
-1. Hold boot button during power-on for 10 seconds
-2. Connect to ESP32-CONFIG-XXXX WiFi network
-3. Access web interface
-4. Use "Factory Reset" option to clear all settings
-
 ## Technical Specifications
 
 ### Power Consumption
 - **ESP32**: ~80mA active, ~10µA deep sleep
 - **BH1750**: ~120µA active, <1µA standby
-- **Total System**: ~85-100mA during normal operation
+- **BME680**: ~2.1µA @ 1Hz, ~90µA @ 10Hz (typical)
+- **SN-3000-FSJT-N01**: ~200mA @ 12V DC (2.4W)
+- **Total System**: ~85-100mA during normal operation (excluding wind sensor)
 
 ### Performance
 - **Sensor Resolution**: 16-bit (65,536 levels)

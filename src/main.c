@@ -306,6 +306,10 @@ static bool read_sensor_data() {
                 ESP_LOGW(TAG, "BME280 reading not yet implemented");
                 continue;
                 
+            case SENSOR_TYPE_WIND_SPEED:
+                read_result = sensor_wind_speed_read(&sensor_data);
+                break;
+                
             default:
                 ESP_LOGW(TAG, "Unknown sensor type: %d", sensor_type);
                 continue;
@@ -350,6 +354,14 @@ static bool read_sensor_data() {
                         cJSON_AddNumberToObject(sensor_obj, "humidity", sensor_data.data.bme280.humidity);
                         cJSON_AddNumberToObject(sensor_obj, "pressure", sensor_data.data.bme280.pressure);
                         cJSON_AddItemToObject(sensors_json, "bme280", sensor_obj);
+                        break;
+                        
+                    case SENSOR_TYPE_WIND_SPEED:
+                        cJSON_AddNumberToObject(sensor_obj, "wind_speed", sensor_data.data.wind_speed.wind_speed);
+                        cJSON_AddNumberToObject(sensor_obj, "wind_speed_avg", sensor_data.data.wind_speed.wind_speed_avg);
+                        cJSON_AddNumberToObject(sensor_obj, "wind_gust", sensor_data.data.wind_speed.wind_gust);
+                        cJSON_AddNumberToObject(sensor_obj, "raw_reading", sensor_data.data.wind_speed.raw_reading);
+                        cJSON_AddItemToObject(sensors_json, "wind_speed", sensor_obj);
                         break;
                         
                     default:
@@ -614,6 +626,9 @@ esp_err_t params_json_get_handler(httpd_req_t *req) {
                 case SENSOR_TYPE_BME280:
                     cJSON_AddItemToObject(sensors, "bme280", sensor_obj);
                     break;
+                case SENSOR_TYPE_WIND_SPEED:
+                    cJSON_AddItemToObject(sensors, "wind_speed", sensor_obj);
+                    break;
                 default:
                     cJSON_Delete(sensor_obj); // Clean up unused sensor object
                     break;
@@ -622,6 +637,32 @@ esp_err_t params_json_get_handler(httpd_req_t *req) {
     }
     
     cJSON_AddItemToObject(json, "sensors", sensors);
+    
+    // Add wind speed configuration parameters
+    nvs_handle_t wind_nvs_handle;
+    esp_err_t nvs_err = nvs_open("wind_config", NVS_READONLY, &wind_nvs_handle);
+    if (nvs_err == ESP_OK) {
+        uint32_t reading_interval = 2000;
+        uint32_t avg_period = 60000;
+        uint32_t gust_period = 300000;
+        
+        nvs_get_u32(wind_nvs_handle, "reading_interval", &reading_interval);
+        nvs_get_u32(wind_nvs_handle, "avg_period", &avg_period);
+        nvs_get_u32(wind_nvs_handle, "gust_period", &gust_period);
+        
+        cJSON_AddNumberToObject(json, "wind_reading_interval_ms", reading_interval);
+        cJSON_AddNumberToObject(json, "wind_avg_period_ms", avg_period);
+        cJSON_AddNumberToObject(json, "wind_gust_period_ms", gust_period);
+        
+        nvs_close(wind_nvs_handle);
+        ESP_LOGI(TAG, "Wind config loaded: interval=%lu, avg=%lu, gust=%lu", reading_interval, avg_period, gust_period);
+    } else {
+        // Use default values if no config found
+        cJSON_AddNumberToObject(json, "wind_reading_interval_ms", 2000);
+        cJSON_AddNumberToObject(json, "wind_avg_period_ms", 60000);
+        cJSON_AddNumberToObject(json, "wind_gust_period_ms", 300000);
+        ESP_LOGI(TAG, "Wind config NVS not found, using defaults");
+    }
     
     char *json_string = cJSON_Print(json);
     ESP_LOGI(TAG, "Sending params.json response: %s", json_string);
@@ -840,6 +881,77 @@ esp_err_t params_update_post_handler(httpd_req_t *req) {
         sensor_config_set_mqtt_topic(SENSOR_TYPE_BME280, topic_dec);
         ESP_LOGI(TAG, "BME280 topic set to: '%s'", topic_dec);
     }
+    
+    // Wind Speed Sensor
+    if (strstr(buf, "sensor_wind_speed_enabled=on")) {
+        sensor_config_set_enabled(SENSOR_TYPE_WIND_SPEED, true);
+        ESP_LOGI(TAG, "Wind Speed sensor enabled");
+    } else {
+        sensor_config_set_enabled(SENSOR_TYPE_WIND_SPEED, false);
+        ESP_LOGI(TAG, "Wind Speed sensor disabled");
+    }
+    
+    char *wind_speed_name_ptr = strstr(buf, "sensor_wind_speed_name=");
+    if (wind_speed_name_ptr) {
+        char name_in[32], name_dec[32];
+        sscanf(wind_speed_name_ptr + 23, "%31[^&]", name_in);
+        url_decode(name_dec, name_in, sizeof(name_dec));
+        sensor_config_set_name(SENSOR_TYPE_WIND_SPEED, name_dec);
+        ESP_LOGI(TAG, "Wind Speed name set to: '%s'", name_dec);
+    }
+    
+    // Wind Speed Configuration Parameters
+    ESP_LOGI(TAG, "=== PROCESSING WIND SPEED CONFIGURATION ===");
+    
+    char *wind_reading_interval_ptr = strstr(buf, "wind_reading_interval_ms=");
+    if (wind_reading_interval_ptr) {
+        uint32_t interval_value = 2000;
+        sscanf(wind_reading_interval_ptr + 25, "%lu", &interval_value);
+        ESP_LOGI(TAG, "Wind reading interval from form: %lu ms", interval_value);
+        
+        nvs_handle_t wind_nvs_handle;
+        esp_err_t nvs_err = nvs_open("wind_config", NVS_READWRITE, &wind_nvs_handle);
+        if (nvs_err == ESP_OK) {
+            nvs_set_u32(wind_nvs_handle, "reading_interval", interval_value);
+            nvs_commit(wind_nvs_handle);
+            nvs_close(wind_nvs_handle);
+            ESP_LOGI(TAG, "Wind reading interval saved to NVS: %lu ms", interval_value);
+        }
+    }
+    
+    char *wind_avg_period_ptr = strstr(buf, "wind_avg_period_ms=");
+    if (wind_avg_period_ptr) {
+        uint32_t period_value = 60000;
+        sscanf(wind_avg_period_ptr + 19, "%lu", &period_value);
+        ESP_LOGI(TAG, "Wind average period from form: %lu ms", period_value);
+        
+        nvs_handle_t wind_nvs_handle;
+        esp_err_t nvs_err = nvs_open("wind_config", NVS_READWRITE, &wind_nvs_handle);
+        if (nvs_err == ESP_OK) {
+            nvs_set_u32(wind_nvs_handle, "avg_period", period_value);
+            nvs_commit(wind_nvs_handle);
+            nvs_close(wind_nvs_handle);
+            ESP_LOGI(TAG, "Wind average period saved to NVS: %lu ms", period_value);
+        }
+    }
+    
+    char *wind_gust_period_ptr = strstr(buf, "wind_gust_period_ms=");
+    if (wind_gust_period_ptr) {
+        uint32_t period_value = 300000;
+        sscanf(wind_gust_period_ptr + 20, "%lu", &period_value);
+        ESP_LOGI(TAG, "Wind gust period from form: %lu ms", period_value);
+        
+        nvs_handle_t wind_nvs_handle;
+        esp_err_t nvs_err = nvs_open("wind_config", NVS_READWRITE, &wind_nvs_handle);
+        if (nvs_err == ESP_OK) {
+            nvs_set_u32(wind_nvs_handle, "gust_period", period_value);
+            nvs_commit(wind_nvs_handle);
+            nvs_close(wind_nvs_handle);
+            ESP_LOGI(TAG, "Wind gust period saved to NVS: %lu ms", period_value);
+        }
+    }
+    
+    ESP_LOGI(TAG, "=== WIND SPEED CONFIGURATION PROCESSING COMPLETE ===");
     
     // Save sensor configuration to NVS
     esp_err_t sensor_save_err = sensor_config_save_to_nvs();
@@ -1479,6 +1591,19 @@ void ap_config_task(void *pvParameter) {
         } else {
             ESP_LOGW(TAG, "BME680 sensor is disabled in configuration");
         }
+        
+        // Initialize wind speed sensor if enabled
+        if (sensor_config_is_enabled(SENSOR_TYPE_WIND_SPEED)) {
+            ESP_LOGI(TAG, "Wind speed sensor is enabled, initializing...");
+            esp_err_t wind_err = sensor_wind_speed_init();
+            if (wind_err == ESP_OK) {
+                ESP_LOGI(TAG, "Wind speed sensor initialized successfully");
+            } else {
+                ESP_LOGE(TAG, "Wind speed sensor initialization failed: %s", esp_err_to_name(wind_err));
+            }
+        } else {
+            ESP_LOGW(TAG, "Wind speed sensor is disabled in configuration");
+        }
     } else {
         ESP_LOGE(TAG, "Sensor configuration system initialization failed: %s", esp_err_to_name(sensor_init_err));
     }
@@ -1645,6 +1770,17 @@ void app_main(void) {
                 ESP_LOGI(TAG, "BME680 sensor initialized successfully");
             } else {
                 ESP_LOGE(TAG, "BME680 sensor initialization failed: %s", esp_err_to_name(bme680_err));
+            }
+        }
+        
+        // Initialize wind speed sensor if enabled
+        if (sensor_config_is_enabled(SENSOR_TYPE_WIND_SPEED)) {
+            ESP_LOGI(TAG, "Wind speed sensor is enabled, initializing...");
+            esp_err_t wind_err = sensor_wind_speed_init();
+            if (wind_err == ESP_OK) {
+                ESP_LOGI(TAG, "Wind speed sensor initialized successfully");
+            } else {
+                ESP_LOGE(TAG, "Wind speed sensor initialization failed: %s", esp_err_to_name(wind_err));
             }
         }
         
