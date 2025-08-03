@@ -1,10 +1,22 @@
-/*
  * SN-3000-FSJT-N01 Wind Speed Sensor Driver
  * RS485/Modbus RTU Implementation for ESP32
  * 
  * This driver implements communication with the SN-3000-FSJT-N01 wind speed sensor
  * using Modbus RTU protocol over RS485 interface. It provides rolling average
  * and gust calculations over configurable time periods.
+ */
+/**
+ * @file sensor_wind_speed.c
+ * @brief SN-3000-FSJT-N01 Wind Speed Sensor Driver for ESP32-MQTT-Weather
+ * @uml{component: Wind Speed Sensor}
+ * @uml{depends: sensor_config.h, driver/uart.h, esp_log.h}
+ *
+ * Implements Modbus RTU communication over RS485 for wind speed measurement.
+ * Provides rolling average and gust calculations.
+ *
+ * @section ToDo
+ * - Add error handling for edge cases
+ * - Support additional wind sensor models if needed
  */
 
 #include "sensor_config.h"
@@ -19,6 +31,11 @@
 #include <math.h>
 #include <inttypes.h>
 
+/**
+ * @var TAG
+ * @brief Logging tag for Wind Speed module
+ * @uml{attribute: TAG}
+ */
 static const char *TAG = "WIND_SPEED";
 
 // Hardware configuration
@@ -86,6 +103,11 @@ static float wind_calculate_average(rolling_buffer_t *buffer, uint64_t current_t
 static float wind_calculate_maximum(rolling_buffer_t *buffer, uint64_t current_time, uint32_t max_age_ms);
 static void wind_reading_timer_callback(void *arg);
 
+/**
+ * @brief Initializes UART for RS485 communication with wind sensor
+ * @return ESP_OK on success, error code otherwise
+ * @uml{method: wind_uart_init}
+ */
 static esp_err_t wind_uart_init(void) {
     uart_config_t uart_config = {
         .baud_rate = WIND_UART_BAUD_RATE,
@@ -134,6 +156,13 @@ static esp_err_t wind_uart_init(void) {
     return ESP_OK;
 }
 
+/**
+ * @brief Calculates Modbus CRC for given data
+ * @param data Pointer to data array
+ * @param length Length of data
+ * @return Calculated CRC value
+ * @uml{method: wind_calculate_crc}
+ */
 static uint16_t wind_calculate_crc(uint8_t *data, int length) {
     uint16_t crc = 0xFFFF;
     for (int i = 0; i < length; i++) {
@@ -149,6 +178,14 @@ static uint16_t wind_calculate_crc(uint8_t *data, int length) {
     return crc;
 }
 
+/**
+ * @brief Reads a register from wind sensor via Modbus RTU
+ * @param slave_addr Modbus slave address
+ * @param reg_addr Register address
+ * @param value Pointer to store read value
+ * @return ESP_OK on success, error code otherwise
+ * @uml{method: wind_modbus_read_register}
+ */
 static esp_err_t wind_modbus_read_register(uint8_t slave_addr, uint16_t reg_addr, uint16_t *value) {
     if (!value) {
         return ESP_ERR_INVALID_ARG;
@@ -219,6 +256,13 @@ static esp_err_t wind_modbus_read_register(uint8_t slave_addr, uint16_t reg_addr
     return ESP_OK;
 }
 
+/**
+ * @brief Initializes rolling buffer for wind speed averaging
+ * @param buffer Pointer to rolling_buffer_t
+ * @param max_size Maximum buffer size
+ * @return ESP_OK on success, error code otherwise
+ * @uml{method: wind_init_rolling_buffer}
+ */
 static esp_err_t wind_init_rolling_buffer(rolling_buffer_t *buffer, int max_size) {
     if (!buffer || max_size <= 0) {
         return ESP_ERR_INVALID_ARG;
@@ -240,6 +284,11 @@ static esp_err_t wind_init_rolling_buffer(rolling_buffer_t *buffer, int max_size
     return ESP_OK;
 }
 
+/**
+ * @brief Frees memory allocated for rolling buffer
+ * @param buffer Pointer to rolling_buffer_t
+ * @uml{method: wind_free_rolling_buffer}
+ */
 static void wind_free_rolling_buffer(rolling_buffer_t *buffer) {
     if (buffer) {
         if (buffer->buffer) {
@@ -256,6 +305,14 @@ static void wind_free_rolling_buffer(rolling_buffer_t *buffer) {
     }
 }
 
+/**
+ * @brief Adds a wind speed value to rolling buffer
+ * @param buffer Pointer to rolling_buffer_t
+ * @param value Wind speed value
+ * @param timestamp Timestamp of reading
+ * @param max_age_ms Maximum age in ms
+ * @uml{method: wind_add_to_buffer}
+ */
 static void wind_add_to_buffer(rolling_buffer_t *buffer, float value, uint64_t timestamp, uint32_t max_age_ms) {
     if (!buffer || !buffer->buffer || !buffer->timestamps) {
         return;
@@ -271,6 +328,14 @@ static void wind_add_to_buffer(rolling_buffer_t *buffer, float value, uint64_t t
     }
 }
 
+/**
+ * @brief Calculates average wind speed from buffer
+ * @param buffer Pointer to rolling_buffer_t
+ * @param current_time Current timestamp
+ * @param max_age_ms Maximum age in ms
+ * @return Average wind speed
+ * @uml{method: wind_calculate_average}
+ */
 static float wind_calculate_average(rolling_buffer_t *buffer, uint64_t current_time, uint32_t max_age_ms) {
     if (!buffer || !buffer->buffer || !buffer->timestamps || buffer->count == 0) {
         return 0.0f;
@@ -290,6 +355,14 @@ static float wind_calculate_average(rolling_buffer_t *buffer, uint64_t current_t
     return valid_count > 0 ? sum / valid_count : 0.0f;
 }
 
+/**
+ * @brief Calculates maximum wind speed (gust) from buffer
+ * @param buffer Pointer to rolling_buffer_t
+ * @param current_time Current timestamp
+ * @param max_age_ms Maximum age in ms
+ * @return Maximum wind speed
+ * @uml{method: wind_calculate_maximum}
+ */
 static float wind_calculate_maximum(rolling_buffer_t *buffer, uint64_t current_time, uint32_t max_age_ms) {
     if (!buffer || !buffer->buffer || !buffer->timestamps || buffer->count == 0) {
         return 0.0f;
@@ -311,6 +384,11 @@ static float wind_calculate_maximum(rolling_buffer_t *buffer, uint64_t current_t
     return max_value;
 }
 
+/**
+ * @brief Timer callback for periodic wind sensor reading
+ * @param arg Unused
+ * @uml{method: wind_reading_timer_callback}
+ */
 static void wind_reading_timer_callback(void *arg) {
     uint16_t raw_value;
     esp_err_t ret = wind_modbus_read_register(WIND_SLAVE_ADDRESS, WIND_REGISTER_ADDRESS, &raw_value);
@@ -338,6 +416,11 @@ static void wind_reading_timer_callback(void *arg) {
     }
 }
 
+/**
+ * @brief Initializes wind speed sensor and rolling buffers
+ * @return ESP_OK on success, error code otherwise
+ * @uml{method: sensor_wind_speed_init}
+ */
 esp_err_t sensor_wind_speed_init(void) {
     if (wind_sensor.initialized) {
         return ESP_OK;
@@ -413,6 +496,12 @@ esp_err_t sensor_wind_speed_init(void) {
     return ESP_OK;
 }
 
+/**
+ * @brief Reads wind speed data and fills sensor_data_t
+ * @param data Pointer to sensor_data_t structure
+ * @return ESP_OK on success, error code otherwise
+ * @uml{method: sensor_wind_speed_read}
+ */
 esp_err_t sensor_wind_speed_read(sensor_data_t* data) {
     if (!wind_sensor.initialized) {
         ESP_LOGE(TAG, "Wind speed sensor not initialized");
@@ -451,10 +540,23 @@ esp_err_t sensor_wind_speed_read(sensor_data_t* data) {
     return ESP_OK;
 }
 
+/**
+ * @brief Returns true if wind speed sensor is initialized
+ * @return true if initialized, false otherwise
+ * @uml{method: wind_speed_is_initialized}
+ */
 bool wind_speed_is_initialized(void) {
     return wind_sensor.initialized;
 }
 
+/**
+ * @brief Sets wind speed sensor configuration parameters
+ * @param reading_interval_ms Reading interval in ms
+ * @param avg_period_ms Average period in ms
+ * @param gust_period_ms Gust period in ms
+ * @return ESP_OK on success, error code otherwise
+ * @uml{method: sensor_wind_speed_set_config}
+ */
 esp_err_t sensor_wind_speed_set_config(uint32_t reading_interval_ms, uint32_t avg_period_ms, uint32_t gust_period_ms) {
     if (reading_interval_ms < 100 || reading_interval_ms > 60000) {
         ESP_LOGE(TAG, "Invalid reading interval: %" PRIu32 " ms (valid range: 100-60000)", reading_interval_ms);
@@ -491,6 +593,14 @@ esp_err_t sensor_wind_speed_set_config(uint32_t reading_interval_ms, uint32_t av
     return ESP_OK;
 }
 
+/**
+ * @brief Gets wind speed sensor configuration parameters
+ * @param reading_interval_ms Pointer to reading interval
+ * @param avg_period_ms Pointer to average period
+ * @param gust_period_ms Pointer to gust period
+ * @return ESP_OK on success, error code otherwise
+ * @uml{method: sensor_wind_speed_get_config}
+ */
 esp_err_t sensor_wind_speed_get_config(uint32_t* reading_interval_ms, uint32_t* avg_period_ms, uint32_t* gust_period_ms) {
     if (!reading_interval_ms || !avg_period_ms || !gust_period_ms) {
         return ESP_ERR_INVALID_ARG;

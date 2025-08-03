@@ -1,4 +1,3 @@
-/*
  * BME680 Environmental Sensor Implementation
  * 
  * This module implements the BME680 environmental sensor driver
@@ -11,6 +10,19 @@
  * - Compensation algorithms for accurate measurements
  * - Gas sensor heater control
  */
+/**
+ * @file sensor_bme680.c
+ * @brief BME680 Environmental Sensor Driver for ESP32-MQTT-Weather
+ * @uml{component: BME680 Sensor}
+ * @uml{depends: sensor_config.h, driver/i2c.h, esp_log.h}
+ *
+ * Implements temperature, humidity, pressure, and gas resistance measurement via I2C.
+ * Handles calibration, compensation, and sensor initialization.
+ *
+ * @section ToDo
+ * - Implement full gas sensor heater control and reading
+ * - Add error handling for edge cases
+ */
 
 #include "sensor_config.h"
 #include "esp_log.h"
@@ -21,6 +33,11 @@
 #include <string.h>
 #include <math.h>
 
+/**
+ * @var TAG
+ * @brief Logging tag for BME680 module
+ * @uml{attribute: TAG}
+ */
 static const char *TAG = "BME680";
 
 // BME680 I2C Configuration
@@ -111,7 +128,6 @@ static const char *TAG = "BME680";
 #define BME680_FILTER_SIZE_63       0x06
 #define BME680_FILTER_SIZE_127      0x07
 
-// BME680 Calibration coefficients structure
 typedef struct {
     uint16_t par_t1;
     int16_t par_t2;
@@ -142,6 +158,11 @@ typedef struct {
     
     int32_t t_fine;  // Used for pressure and humidity compensation
 } bme680_calib_data_t;
+/**
+ * @struct bme680_calib_data_t
+ * @brief Stores BME680 calibration coefficients for compensation algorithms
+ * @uml{class: bme680_calib_data_t}
+ */
 
 static bool bme680_initialized = false;
 static bme680_calib_data_t calib_data;
@@ -151,6 +172,11 @@ extern i2c_master_bus_handle_t i2c_bus_handle;
 static i2c_master_dev_handle_t bme680_dev_handle = NULL;
 
 // I2C initialization for BME680 (shares bus with other sensors)
+/**
+ * @brief Initializes I2C bus for BME680 sensor
+ * @return ESP_OK on success, error code otherwise
+ * @uml{method: bme680_init_i2c}
+ */
 static esp_err_t bme680_init_i2c(void) {
     // The I2C bus is already initialized by the BH1750 sensor
     if (i2c_bus_handle == NULL) {
@@ -230,6 +256,13 @@ static esp_err_t bme680_init_i2c(void) {
 }
 
 // I2C communication functions
+/**
+ * @brief Writes a value to a BME680 register via I2C
+ * @param reg_addr Register address
+ * @param data Data to write
+ * @return ESP_OK on success, error code otherwise
+ * @uml{method: bme680_write_register}
+ */
 static esp_err_t bme680_write_register(uint8_t reg_addr, uint8_t data) {
     uint8_t write_buf[2] = {reg_addr, data};
     esp_err_t ret = i2c_master_transmit(bme680_dev_handle, write_buf, sizeof(write_buf), BME680_I2C_MASTER_TIMEOUT_MS);
@@ -244,6 +277,13 @@ static esp_err_t bme680_write_register(uint8_t reg_addr, uint8_t data) {
     return ret;
 }
 
+/**
+ * @brief Reads a value from a BME680 register via I2C
+ * @param reg_addr Register address
+ * @param data Pointer to store read value
+ * @return ESP_OK on success, error code otherwise
+ * @uml{method: bme680_read_register}
+ */
 static esp_err_t bme680_read_register(uint8_t reg_addr, uint8_t *data) {
     esp_err_t ret = i2c_master_transmit_receive(bme680_dev_handle, &reg_addr, 1, data, 1, BME680_I2C_MASTER_TIMEOUT_MS);
     
@@ -257,6 +297,14 @@ static esp_err_t bme680_read_register(uint8_t reg_addr, uint8_t *data) {
     return ret;
 }
 
+/**
+ * @brief Reads multiple values from BME680 registers via I2C
+ * @param reg_addr Starting register address
+ * @param data Buffer to store read values
+ * @param len Number of bytes to read
+ * @return ESP_OK on success, error code otherwise
+ * @uml{method: bme680_read_registers}
+ */
 static esp_err_t bme680_read_registers(uint8_t reg_addr, uint8_t *data, size_t len) {
     esp_err_t ret = i2c_master_transmit_receive(bme680_dev_handle, &reg_addr, 1, data, len, BME680_I2C_MASTER_TIMEOUT_MS);
     
@@ -271,6 +319,11 @@ static esp_err_t bme680_read_registers(uint8_t reg_addr, uint8_t *data, size_t l
 }
 
 // Read calibration coefficients from BME680
+/**
+ * @brief Reads calibration coefficients from BME680 sensor
+ * @return ESP_OK on success, error code otherwise
+ * @uml{method: bme680_read_calibration_data}
+ */
 static esp_err_t bme680_read_calibration_data(void) {
     uint8_t coeff[41];  // Buffer for all calibration coefficients
     esp_err_t ret;
@@ -379,6 +432,12 @@ static esp_err_t bme680_read_calibration_data(void) {
 }
 
 // Temperature compensation algorithm
+/**
+ * @brief Compensates raw temperature ADC value using calibration data
+ * @param temp_adc Raw temperature ADC value
+ * @return Compensated temperature in Celsius
+ * @uml{method: bme680_compensate_temperature}
+ */
 static float bme680_compensate_temperature(uint32_t temp_adc) {
     int64_t var1, var2, var3;
     float calc_temp;
@@ -394,6 +453,12 @@ static float bme680_compensate_temperature(uint32_t temp_adc) {
 }
 
 // Pressure compensation algorithm  
+/**
+ * @brief Compensates raw pressure ADC value using calibration data
+ * @param pres_adc Raw pressure ADC value
+ * @return Compensated pressure in hPa
+ * @uml{method: bme680_compensate_pressure}
+ */
 static float bme680_compensate_pressure(uint32_t pres_adc) {
     int32_t var1, var2, var3, pressure_comp;
     
@@ -422,6 +487,12 @@ static float bme680_compensate_pressure(uint32_t pres_adc) {
 }
 
 // Humidity compensation algorithm
+/**
+ * @brief Compensates raw humidity ADC value using calibration data
+ * @param hum_adc Raw humidity ADC value
+ * @return Compensated humidity percentage
+ * @uml{method: bme680_compensate_humidity}
+ */
 static float bme680_compensate_humidity(uint16_t hum_adc) {
     int32_t var1, var2, var3, var4, var5, var6, temp_scaled, calc_hum;
     
@@ -444,6 +515,13 @@ static float bme680_compensate_humidity(uint16_t hum_adc) {
 }
 
 // Gas resistance calculation (simplified)
+/**
+ * @brief Compensates raw gas resistance ADC value using calibration data
+ * @param gas_res_adc Raw gas resistance ADC value
+ * @param gas_range Gas range index
+ * @return Compensated gas resistance value
+ * @uml{method: bme680_compensate_gas_resistance}
+ */
 static float bme680_compensate_gas_resistance(uint16_t gas_res_adc, uint8_t gas_range) {
     int64_t var1;
     uint64_t var2;
@@ -467,6 +545,11 @@ static float bme680_compensate_gas_resistance(uint16_t gas_res_adc, uint8_t gas_
     return (float)calc_gas_res;
 }
 
+/**
+ * @brief Initializes the BME680 sensor and configures measurement settings
+ * @return ESP_OK on success, error code otherwise
+ * @uml{method: sensor_bme680_init}
+ */
 esp_err_t sensor_bme680_init(void) {
     if (bme680_initialized) {
         ESP_LOGI(TAG, "BME680 already initialized");
@@ -546,6 +629,12 @@ esp_err_t sensor_bme680_init(void) {
     return ESP_OK;
 }
 
+/**
+ * @brief Reads environmental data from BME680 sensor and fills sensor_data_t
+ * @param data Pointer to sensor_data_t structure
+ * @return ESP_OK on success, error code otherwise
+ * @uml{method: sensor_bme680_read}
+ */
 esp_err_t sensor_bme680_read(sensor_data_t* data) {
     if (!bme680_initialized) {
         ESP_LOGE(TAG, "BME680 not initialized");
@@ -665,6 +754,11 @@ esp_err_t sensor_bme680_read(sensor_data_t* data) {
     return ESP_OK;
 }
 
+/**
+ * @brief Returns true if BME680 sensor is initialized
+ * @return true if initialized, false otherwise
+ * @uml{method: bme680_is_initialized}
+ */
 bool bme680_is_initialized(void) {
     return bme680_initialized;
 }

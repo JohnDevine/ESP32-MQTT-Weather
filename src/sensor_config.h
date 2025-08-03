@@ -1,9 +1,20 @@
-/*
  * ESP32 MQTT Configurable Sensor System
  * 
  * This header file defines the configurable sensor system that allows
  * individual sensors to be enabled/disabled at runtime through the web
  * interface, with settings stored in NVS.
+ */
+/**
+ * @file sensor_config.h
+ * @brief Sensor configuration system header for ESP32-MQTT-Weather
+ * @uml{component: Sensor Config}
+ * @uml{depends: driver/i2c_master.h, esp_err.h}
+ *
+ * Defines sensor types, configuration structures, and function prototypes for runtime configuration.
+ *
+ * @section ToDo
+ * - Add support for additional sensor types
+ * - Refactor for modularity if new sensors added
  */
 
 #ifndef SENSOR_CONFIG_H

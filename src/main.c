@@ -1,4 +1,3 @@
-/*
  * ESP32-MQTT-WEATHER Configurable Sensor System
  * 
  * This project implements an ESP32-based sensor monitoring system that reads
@@ -17,7 +16,7 @@
  * HARDWARE REQUIREMENTS:
  * - ESP32 development board
  * - Supported sensors: BH1750 (light), BME680 (environmental), etc.
- * - Pull-up resistors for I2C lines if using I2C (typically 4.7kΩ)
+ * - Pull-up resistors for I2C lines if using I2C (typically 4.7 kilo-ohm (kOhm))
  * 
  * DATA OUTPUT:
  * - Combined JSON message with processor metrics and all enabled sensor data
@@ -28,15 +27,51 @@
  * Search for "TEMPLATE:" comments throughout the code to find areas that need
  * customization for your specific sensor(s) and use case.
  */
+/**
+ * @file main.c
+ * @brief Main entry point for ESP32-MQTT-Weather configurable sensor system.
+ * @author JohnDevine
+ * @date 2025
 
-/*
- * CONDITIONAL LOGGING CONFIGURATION
- * 
- * To enable debug logging for this specific file, uncomment the line below.
- * This allows ESP_LOGD() calls to be compiled in and displayed when the 
- * global log level is set to DEBUG or VERBOSE.
- * 
- * Log Levels (from highest to lowest priority):
+// ==========================
+//   FUNCTION DECLARATIONS
+// ==========================
+
+// NVS management functions
+static void load_watchdog_counter_from_nvs(void);   // Loads watchdog counter from NVS
+static void save_watchdog_counter_to_nvs(void);     // Saves watchdog counter to NVS
+
+// System info functions
+static int32_t get_wifi_rssi_percent(void);         // Gets WiFi RSSI as percent
+static char* get_ip_address(void);                  // Gets device IP address
+static float get_cpu_temperature(void);             // Gets CPU temperature
+static char* get_software_version(void);            // Gets software version string
+static char* get_chip_id(void);                     // Gets chip ID string
+
+// DNS hijack task
+void dns_hijack_task(void *pvParameter);            // DNS hijack task
+
+// Utility functions
+void url_decode(char *dst, const char *src, size_t dstsize); // Decodes URL-encoded strings
+
+// HTTP handler functions
+static esp_err_t params_json_get_handler(httpd_req_t *req);      // Handles /params.json GET
+static esp_err_t params_update_post_handler(httpd_req_t *req);   // Handles /update POST
+static esp_err_t parameters_html_handler(httpd_req_t *req);      // Handles /parameters.html GET
+static esp_err_t captive_redirect_handler(httpd_req_t *req);     // Handles captive portal redirect
+static esp_err_t sysinfo_json_get_handler(httpd_req_t *req);     // Handles /sysinfo.json GET
+static esp_err_t ota_firmware_handler(httpd_req_t *req);         // Handles OTA firmware upload
+static esp_err_t ota_filesystem_handler(httpd_req_t *req);       // Handles OTA filesystem upload
+
+// Wi-Fi and MQTT functions
+static void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data); // WiFi event handler
+static void mqtt_event_handler(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data); // MQTT event handler
+static bool test_mqtt_broker_connectivity(const char* broker_url); // Tests MQTT broker connectivity
+static bool check_wifi_connection(void);                // Checks WiFi connection
+void wifi_init_sta(void);                               // Initializes WiFi in station mode
+static void mqtt_app_start(void);                       // Starts MQTT client
+void publish_sensor_data_mqtt(const char* topic, const char* json_data); // Publishes sensor data (legacy)
+void publish_combined_sensor_mqtt(const char* topic, const char* json_data); // Publishes combined sensor data
  * - ESP_LOG_ERROR   (E) - Error conditions
  * - ESP_LOG_WARN    (W) - Warning conditions  
  * - ESP_LOG_INFO    (I) - Informational messages
@@ -92,139 +127,160 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
-#include <errno.h>
-#include "esp_chip_info.h"
-#include "esp_ota_ops.h"
-#include "esp_flash.h"
-#include "spi_flash_mmap.h"
-#include "project_version.h"  // Single source of truth for version
-#include "esp_partition.h"
-#include "esp_http_server.h"
 
-// Watchdog timer includes
-#include "esp_task_wdt.h"
+// ==========================
+//        INCLUDES
+// ==========================
 
-// System monitoring includes
-#include "esp_netif.h"
+#include <stdio.h>                // Standard C input/output library
+#include "freertos/FreeRTOS.h"    // FreeRTOS OS definitions
+#include "freertos/task.h"        // FreeRTOS task management
+#include "driver/gpio.h"          // ESP32 GPIO driver
+#include "driver/i2c_master.h"    // I2C driver (remove if not using I2C)
+#include "esp_log.h"              // ESP-IDF logging library
+#include <string.h>                // Standard C string manipulation library
+
+#include "sensor_config.h"        // Sensor configuration system
+#include "i2c_scanner.h"          // I2C diagnostic tool
+
+#include "esp_wifi.h"             // Wi-Fi driver
+#include "esp_event.h"            // Event loop library
+#include "nvs_flash.h"            // Non-volatile storage (NVS) library
+#include "lwip/err.h"             // lwIP error codes
+#include "lwip/sys.h"             // lwIP system functions
+#include "mqtt_client.h"          // MQTT client library
+#include "cJSON.h"                // For JSON formatting
+#include "esp_spiffs.h"           // SPIFFS filesystem support
+#include "esp_system.h"           // ESP32 system functions
+#include "esp_mac.h"              // MAC address functions
+#include "esp_efuse.h"            // eFuse access
+#include "esp_http_server.h"      // HTTP server library
+#include "lwip/sockets.h"         // lwIP sockets
+#include "lwip/netdb.h"           // lwIP network database
+#include <sys/socket.h>            // POSIX sockets
+#include <netinet/in.h>            // Internet address family
+#include <arpa/inet.h>             // IP address conversion
+#include <errno.h>                 // Error number definitions
+#include "esp_chip_info.h"         // Chip info functions
+#include "esp_ota_ops.h"          // OTA update functions
+#include "esp_flash.h"            // Flash memory functions
+#include "spi_flash_mmap.h"       // SPI flash memory mapping
+#include "project_version.h"      // Single source of truth for version
+#include "esp_partition.h"        // Partition management
+#include "esp_http_server.h"      // HTTP server (duplicate include)
+
+#include "esp_task_wdt.h"         // Watchdog timer
+#include "esp_netif.h"            // Network interface
+
+// ==========================
+//   GLOBAL VARIABLES
+// ==========================
 
 // Software watchdog variables
-static uint32_t watchdog_timeout_ms = 0;  // Watchdog timeout (10× sample interval)
+static uint32_t watchdog_timeout_ms = 0;        // Watchdog timeout (10× sample interval)
 static TickType_t last_successful_publish = 0;  // Last successful MQTT publish time
-static bool watchdog_enabled = false;  // Whether watchdog is enabled
-static bool mqtt_publish_success = false;  // Flag for successful MQTT publish
+static bool watchdog_enabled = false;           // Whether watchdog is enabled
+static bool mqtt_publish_success = false;       // Flag for successful MQTT publish
 
-// Debug logging flag - set to false to reduce log output (except watchdog logs)
-static bool debug_logging = false;
+/**
+ * @var debug_logging
+ * @brief Enables or disables debug logging output for main.c
+ * @uml{attribute: debug_logging}
+ */
+static bool debug_logging = false;              // Debug logging flag
 
-#define WIFI_NVS_NAMESPACE "wifi_cfg"
-#define WIFI_NVS_KEY_SSID "ssid"
-#define WIFI_NVS_KEY_PASS "pass"
-#define MQTT_NVS_KEY_URL "broker_url"
-#define NVS_KEY_SAMPLE_INTERVAL "sample_interval"
-#define NVS_KEY_DATA_TOPIC "data_topic"
-#define NVS_KEY_WATCHDOG_COUNTER "watchdog_cnt"
-#define DEFAULT_WIFI_SSID "yourSSID"
-#define DEFAULT_WIFI_PASS "yourpassword"
-// Temporary: Using public test broker - change this to your local broker once network is confirmed
-#define DEFAULT_MQTT_BROKER_URL "mqtt://test.mosquitto.org:1883"
-// Original: #define DEFAULT_MQTT_BROKER_URL "mqtt://192.168.1.100"
-#define DEFAULT_SAMPLE_INTERVAL 5000L
+#define WIFI_NVS_NAMESPACE "wifi_cfg"           // NVS namespace for WiFi config
+#define WIFI_NVS_KEY_SSID "ssid"                // NVS key for WiFi SSID
+#define WIFI_NVS_KEY_PASS "pass"                // NVS key for WiFi password
+#define MQTT_NVS_KEY_URL "broker_url"           // NVS key for MQTT broker URL
+#define NVS_KEY_SAMPLE_INTERVAL "sample_interval"// NVS key for sample interval
+#define NVS_KEY_DATA_TOPIC "data_topic"         // NVS key for MQTT data topic
+#define NVS_KEY_WATCHDOG_COUNTER "watchdog_cnt" // NVS key for watchdog counter
+#define DEFAULT_WIFI_SSID "yourSSID"            // Default WiFi SSID
+#define DEFAULT_WIFI_PASS "yourpassword"        // Default WiFi password
+#define DEFAULT_MQTT_BROKER_URL "mqtt://test.mosquitto.org:1883" // Default MQTT broker URL
+#define DEFAULT_SAMPLE_INTERVAL 5000L            // Default sample interval (ms)
 
-static char wifi_ssid[33] = DEFAULT_WIFI_SSID;
-static char wifi_pass[65] = DEFAULT_WIFI_PASS;
-static char mqtt_broker_url[128] = DEFAULT_MQTT_BROKER_URL;
-// TEMPLATE: Update default topic name for your sensor type
-char data_topic[41] = "sensor/baanfarang/weather/office01";  // Default MQTT topic for sensor data
-static long sample_interval_ms = DEFAULT_SAMPLE_INTERVAL;
-static uint32_t watchdog_reset_counter = 0;  // Watchdog timer reset counter
+static char wifi_ssid[33] = DEFAULT_WIFI_SSID;   // WiFi SSID buffer
+static char wifi_pass[65] = DEFAULT_WIFI_PASS;   // WiFi password buffer
+static char mqtt_broker_url[128] = DEFAULT_MQTT_BROKER_URL; // MQTT broker URL buffer
+char data_topic[41] = "sensor/baanfarang/weather/office01"; // Default MQTT topic for sensor data
+static long sample_interval_ms = DEFAULT_SAMPLE_INTERVAL;    // Sample interval in ms
+static uint32_t watchdog_reset_counter = 0;     // Watchdog timer reset counter
 
-#define BOOT_BTN_GPIO GPIO_NUM_0
-
-// Note: I2C configuration is now handled by the sensor modules in the sensor_config system
-// The original template I2C defines have been removed since we use the configurable sensor system
+#define BOOT_BTN_GPIO GPIO_NUM_0                 // GPIO for boot button
 
 // Tag used for logging messages from this module
-static const char *TAG = "DATA_READER";
+static const char *TAG = "DATA_READER";         // Logging tag
 
-// Wi-Fi Configuration
-#define EXAMPLE_ESP_MAXIMUM_RETRY  5
-
-// MQTT Configuration
-#define MQTT_BROKER_URL "mqtt://192.168.1.5"
+#define EXAMPLE_ESP_MAXIMUM_RETRY  5             // Max WiFi retry attempts
+#define MQTT_BROKER_URL "mqtt://192.168.1.5"    // MQTT broker URL (unused)
 
 // Global variable for MQTT client
-static esp_mqtt_client_handle_t mqtt_client;
-static int wifi_retry_num = 0;
+static esp_mqtt_client_handle_t mqtt_client;     // MQTT client handle
+static int wifi_retry_num = 0;                   // WiFi retry counter
+static char* get_ip_address(void);                ///< Gets device IP address
+static float get_cpu_temperature(void);           ///< Gets CPU temperature
+static char* get_software_version(void);          ///< Gets software version string
+static char* get_chip_id(void);                   ///< Gets chip ID string
 
-// PutInputCodeHere: Define your protocol-specific data structures here
-// Example: If you need to store parsed fields from your input data
-// typedef struct {
-//     uint8_t id;
-//     uint32_t value;
-//     char strval[48];
-//     int is_ascii;
-// } parsed_field_t;
-// #define MAX_PARSED_FIELDS 32
-// static parsed_field_t parsed_fields[MAX_PARSED_FIELDS];
-// static int parsed_fields_count = 0;
+// DNS hijack
+void dns_hijack_task(void *pvParameter);          ///< DNS hijack task
 
-// Forward declarations for functions defined later in this file
+// Utility
+void url_decode(char *dst, const char *src, size_t dstsize); ///< Decodes URL-encoded strings
 
-// Forward declarations for NVS functions
-static void load_watchdog_counter_from_nvs(void);
-static void save_watchdog_counter_to_nvs(void);
+// HTTP handlers
+static esp_err_t params_json_get_handler(httpd_req_t *req); ///< Handles /params.json GET
+static esp_err_t params_update_post_handler(httpd_req_t *req); ///< Handles /update POST
+static esp_err_t parameters_html_handler(httpd_req_t *req); ///< Handles /parameters.html GET
+static esp_err_t captive_redirect_handler(httpd_req_t *req); ///< Handles captive portal redirect
+static esp_err_t sysinfo_json_get_handler(httpd_req_t *req); ///< Handles /sysinfo.json GET
+static esp_err_t ota_firmware_handler(httpd_req_t *req); ///< Handles OTA firmware upload
+static esp_err_t ota_filesystem_handler(httpd_req_t *req); ///< Handles OTA filesystem upload
 
-// Forward declarations for system info functions
-static int32_t get_wifi_rssi_percent(void);
-static char* get_ip_address(void);
-static float get_cpu_temperature(void);
-static char* get_software_version(void);
-static char* get_chip_id(void);
+// Wi-Fi and MQTT
+static void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data); ///< WiFi event handler
+static void mqtt_event_handler(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data); ///< MQTT event handler
+static bool test_mqtt_broker_connectivity(const char* broker_url); ///< Tests MQTT broker connectivity
+static bool check_wifi_connection(void); ///< Checks WiFi connection
+void wifi_init_sta(void); ///< Initializes WiFi in station mode
+static void mqtt_app_start(void); ///< Starts MQTT client
+void publish_sensor_data_mqtt(const char* topic, const char* json_data); ///< Publishes sensor data (legacy)
+void publish_combined_sensor_mqtt(const char* topic, const char* json_data); ///< Publishes combined sensor data
 
-// Forward declaration for DNS hijack task
-void dns_hijack_task(void *pvParameter);
 
-void url_decode(char *dst, const char *src, size_t dstsize);
 
-// Forward declarations for HTTP handlers
-static esp_err_t params_json_get_handler(httpd_req_t *req);
-static esp_err_t params_update_post_handler(httpd_req_t *req);
-static esp_err_t parameters_html_handler(httpd_req_t *req);
-static esp_err_t captive_redirect_handler(httpd_req_t *req);
-static esp_err_t sysinfo_json_get_handler(httpd_req_t *req);
-static esp_err_t ota_firmware_handler(httpd_req_t *req);
-static esp_err_t ota_filesystem_handler(httpd_req_t *req);
+// ==========================
+//   UTILITY FUNCTIONS
+// ==========================
 
-// New forward declarations for Wi-Fi and MQTT
-static void wifi_event_handler(void* arg, esp_event_base_t event_base,
-                                int32_t event_id, void* event_data);
-static void mqtt_event_handler(void* arg, esp_event_base_t event_base,
-                               int32_t event_id, void* event_data);
-static bool test_mqtt_broker_connectivity(const char* broker_url);
-static bool check_wifi_connection(void);
-void wifi_init_sta(void);
-static void mqtt_app_start(void);
-void publish_sensor_data_mqtt(const char* topic, const char* json_data); // Legacy function (kept for compatibility)
-void publish_combined_sensor_mqtt(const char* topic, const char* json_data); // Publish combined sensor data to main topic
-
-// Forward declaration for DNS hijack task
-void dns_hijack_task(void *pvParameter);
-
-// Helper function to extract a 16-bit unsigned integer from a buffer.
-// Assumes big-endian byte order (most significant byte first).
-// buffer: Pointer to the byte array.
-// offset: Starting index in the buffer from where to read the 16-bit integer.
-// Returns the extracted 16-bit unsigned integer.
+/**
+ * @brief Extracts a 16-bit unsigned integer from a buffer (big-endian).
+ * @param buffer Pointer to byte array
+ * @param offset Index to start reading
+ * @return Extracted 16-bit unsigned integer
+ * @uml{method: unpack_u16_be}
+ *
+ * This function reads two consecutive bytes from the buffer starting at 'offset',
+ * and combines them into a single 16-bit unsigned integer using big-endian order.
+ * Example: buffer[offset] = MSB, buffer[offset+1] = LSB.
+ */
 uint16_t unpack_u16_be(const uint8_t *buffer, int offset) {
     // Combine two consecutive bytes into a 16-bit value.
     // buffer[offset] is the most significant byte, buffer[offset+1] is the least significant.
     return ((uint16_t)buffer[offset] << 8) | buffer[offset + 1];
 }
 
-// Helper function to extract an 8-bit unsigned integer (a single byte) from a buffer.
-// buffer: Pointer to the byte array.
-// offset: Index in the buffer from where to read the 8-bit integer.
-// Returns the extracted 8-bit unsigned integer.
+/**
+ * @brief Extracts an 8-bit unsigned integer from a buffer.
+ * @param buffer Pointer to byte array
+ * @param offset Index to read
+ * @return Extracted 8-bit unsigned integer
+ * @uml{method: unpack_u8}
+ *
+ * This function returns the byte at the specified offset in the buffer.
+ */
 uint8_t unpack_u8(const uint8_t *buffer, int offset) {
     // Directly return the byte at the specified offset.
     return buffer[offset];
@@ -233,14 +289,26 @@ uint8_t unpack_u8(const uint8_t *buffer, int offset) {
 // TEMPLATE: Main sensor data reading function
 // Replace this function with your specific sensor reading logic
 // Function to read all enabled sensors and publish combined data
+
+/**
+ * @brief Reads all enabled sensors and publishes combined data to MQTT.
+ * @return true if any sensor was read and published successfully, false otherwise
+ * @uml{method: read_sensor_data}
+ * @uml{calls: sensor_config_is_enabled, sensor_config_get_name, sensor_bh1750_read, sensor_bme680_read, sensor_wind_speed_read, publish_combined_sensor_mqtt}
+ * @uml{note: TODO - Implement DHT22, DS18B20, BME280 reading}
+ */
 static bool read_sensor_data() {
+    // Log the start of sensor reading
     ESP_LOGI(TAG, "Reading enabled sensors...");
     
+    // Track if any sensor was successfully read and published
     bool any_sensor_successful = false;
+    // Create JSON objects for combined output, processor info, and sensor data
     cJSON *combined_json = cJSON_CreateObject();
     cJSON *processor_json = cJSON_CreateObject();
     cJSON *sensors_json = cJSON_CreateObject();
     
+    // Check for successful JSON object creation
     if (!combined_json || !processor_json || !sensors_json) {
         ESP_LOGE(TAG, "Failed to create JSON objects");
         if (combined_json) cJSON_Delete(combined_json);
@@ -249,142 +317,145 @@ static bool read_sensor_data() {
         return false;
     }
     
-    // Add processor metrics (system information)
-    int32_t wifi_rssi_percent = get_wifi_rssi_percent();
+    // Add processor metrics (system information) to processor_json
+    int32_t wifi_rssi_percent = get_wifi_rssi_percent(); // Get WiFi signal strength
     cJSON_AddNumberToObject(processor_json, "WiFiRSSI", wifi_rssi_percent);
     
-    char *ip_address = get_ip_address();
+    char *ip_address = get_ip_address(); // Get device IP address
     cJSON_AddStringToObject(processor_json, "IPAddress", ip_address);
     
-    float cpu_temp = get_cpu_temperature();
+    float cpu_temp = get_cpu_temperature(); // Get CPU temperature
     cJSON_AddNumberToObject(processor_json, "CPUTemperature", cpu_temp);
     
-    char *software_version = get_software_version();
+    char *software_version = get_software_version(); // Get software version
     cJSON_AddStringToObject(processor_json, "SoftwareVersion", software_version);
     
-    char *chip_id = get_chip_id();
+    char *chip_id = get_chip_id(); // Get chip ID
     cJSON_AddStringToObject(processor_json, "ChipID", chip_id);
     
-    cJSON_AddNumberToObject(processor_json, "WDTRestartCount", watchdog_reset_counter);
+    cJSON_AddNumberToObject(processor_json, "WDTRestartCount", watchdog_reset_counter); // Add watchdog counter
     
     // Iterate through all sensor types and read enabled ones
     for (int i = 0; i < SENSOR_TYPE_MAX_COUNT; i++) {
         sensor_type_t sensor_type = (sensor_type_t)i;
         
+        // Skip disabled sensors
         if (!sensor_config_is_enabled(sensor_type)) {
             ESP_LOGD(TAG, "Sensor %s is disabled, skipping", sensor_config_get_name(sensor_type));
             continue;
         }
         
+        // Log which sensor is being read
         ESP_LOGI(TAG, "Reading %s sensor...", sensor_config_get_name(sensor_type));
         
-        sensor_data_t sensor_data;
-        esp_err_t read_result = ESP_FAIL;
+        sensor_data_t sensor_data; // Structure to hold sensor data
+        esp_err_t read_result = ESP_FAIL; // Default to failure
         
         // Read sensor based on type
         switch (sensor_type) {
             case SENSOR_TYPE_BH1750:
+                // Read BH1750 light sensor
                 read_result = sensor_bh1750_read(&sensor_data);
                 break;
-                
             case SENSOR_TYPE_BME680:
+                // Read BME680 environmental sensor
                 read_result = sensor_bme680_read(&sensor_data);
                 break;
-                
             case SENSOR_TYPE_DHT22:
                 // TODO: Implement DHT22 reading
                 ESP_LOGW(TAG, "DHT22 reading not yet implemented");
                 continue;
-                
             case SENSOR_TYPE_DS18B20:
                 // TODO: Implement DS18B20 reading
                 ESP_LOGW(TAG, "DS18B20 reading not yet implemented");
                 continue;
-                
             case SENSOR_TYPE_BME280:
                 // TODO: Implement BME280 reading
                 ESP_LOGW(TAG, "BME280 reading not yet implemented");
                 continue;
-                
             case SENSOR_TYPE_WIND_SPEED:
+                // Read wind speed sensor
                 read_result = sensor_wind_speed_read(&sensor_data);
                 break;
-                
             default:
+                // Unknown sensor type
                 ESP_LOGW(TAG, "Unknown sensor type: %d", sensor_type);
                 continue;
         }
         
+        // If sensor read was successful and data is valid
         if (read_result == ESP_OK && sensor_data.valid) {
-            // Add sensor data to the combined JSON
+            // Create a JSON object for this sensor
             cJSON *sensor_obj = cJSON_CreateObject();
             if (sensor_obj) {
                 // Add sensor metadata
                 cJSON_AddStringToObject(sensor_obj, "name", sensor_config_get_name(sensor_type));
                 cJSON_AddBoolToObject(sensor_obj, "valid", sensor_data.valid);
                 
-                // Add sensor-specific data
+                // Add sensor-specific data fields
                 switch (sensor_type) {
                     case SENSOR_TYPE_BH1750:
+                        // Add BH1750 lux value
                         cJSON_AddNumberToObject(sensor_obj, "lux", sensor_data.data.bh1750.lux);
                         cJSON_AddItemToObject(sensors_json, "bh1750", sensor_obj);
                         break;
-                        
                     case SENSOR_TYPE_BME680:
+                        // Add BME680 temperature, humidity, pressure, gas resistance
                         cJSON_AddNumberToObject(sensor_obj, "temperature", sensor_data.data.bme680.temperature);
                         cJSON_AddNumberToObject(sensor_obj, "humidity", sensor_data.data.bme680.humidity);
                         cJSON_AddNumberToObject(sensor_obj, "pressure", sensor_data.data.bme680.pressure);
                         cJSON_AddNumberToObject(sensor_obj, "gas_resistance", sensor_data.data.bme680.gas_resistance);
                         cJSON_AddItemToObject(sensors_json, "bme680", sensor_obj);
                         break;
-                        
                     case SENSOR_TYPE_DHT22:
+                        // Add DHT22 temperature and humidity
                         cJSON_AddNumberToObject(sensor_obj, "temperature", sensor_data.data.dht22.temperature);
                         cJSON_AddNumberToObject(sensor_obj, "humidity", sensor_data.data.dht22.humidity);
                         cJSON_AddItemToObject(sensors_json, "dht22", sensor_obj);
                         break;
-                        
                     case SENSOR_TYPE_DS18B20:
+                        // Add DS18B20 temperature
                         cJSON_AddNumberToObject(sensor_obj, "temperature", sensor_data.data.ds18b20.temperature);
                         cJSON_AddItemToObject(sensors_json, "ds18b20", sensor_obj);
                         break;
-                        
                     case SENSOR_TYPE_BME280:
+                        // Add BME280 temperature, humidity, pressure
                         cJSON_AddNumberToObject(sensor_obj, "temperature", sensor_data.data.bme280.temperature);
                         cJSON_AddNumberToObject(sensor_obj, "humidity", sensor_data.data.bme280.humidity);
                         cJSON_AddNumberToObject(sensor_obj, "pressure", sensor_data.data.bme280.pressure);
                         cJSON_AddItemToObject(sensors_json, "bme280", sensor_obj);
                         break;
-                        
                     case SENSOR_TYPE_WIND_SPEED:
+                        // Add wind speed, average, gust, and raw reading
                         cJSON_AddNumberToObject(sensor_obj, "wind_speed", sensor_data.data.wind_speed.wind_speed);
                         cJSON_AddNumberToObject(sensor_obj, "wind_speed_avg", sensor_data.data.wind_speed.wind_speed_avg);
                         cJSON_AddNumberToObject(sensor_obj, "wind_gust", sensor_data.data.wind_speed.wind_gust);
                         cJSON_AddNumberToObject(sensor_obj, "raw_reading", sensor_data.data.wind_speed.raw_reading);
                         cJSON_AddItemToObject(sensors_json, "wind_speed", sensor_obj);
                         break;
-                        
                     default:
+                        // Unknown sensor type, clean up
                         cJSON_Delete(sensor_obj);
                         continue;
                 }
-                
+                // Mark that at least one sensor was successful
                 any_sensor_successful = true;
                 ESP_LOGI(TAG, "%s sensor reading successful", sensor_config_get_name(sensor_type));
             }
         } else {
+            // Log sensor read failure
             ESP_LOGE(TAG, "%s sensor reading failed", sensor_config_get_name(sensor_type));
         }
     }
     
-    // Combine processor and sensor data
+    // Combine processor and sensor data into the final JSON
     cJSON_AddItemToObject(combined_json, "processor", processor_json);
     cJSON_AddItemToObject(combined_json, "sensors", sensors_json);
     
     // Publish the combined message to the main data topic
     char *json_string = cJSON_PrintUnformatted(combined_json);
     if (json_string && any_sensor_successful) {
-        publish_combined_sensor_mqtt(data_topic, json_string);
+        publish_combined_sensor_mqtt(data_topic, json_string); // Publish to MQTT
         ESP_LOGI(TAG, "Combined sensor data published successfully");
         free(json_string);
         cJSON_Delete(combined_json);
@@ -398,33 +469,41 @@ static bool read_sensor_data() {
 }
 
 // Place these functions before app_main so they are visible to it
+// Load WiFi configuration from NVS (persistent storage)
 void load_wifi_config_from_nvs() {
     nvs_handle_t nvs_handle;
+    // Open NVS namespace for WiFi config
     esp_err_t err = nvs_open(WIFI_NVS_NAMESPACE, NVS_READWRITE, &nvs_handle);
     if (err == ESP_OK) {
         size_t ssid_len = sizeof(wifi_ssid);
         size_t pass_len = sizeof(wifi_pass);
+        // Try to read SSID from NVS, fallback to default if not found
         if (nvs_get_str(nvs_handle, WIFI_NVS_KEY_SSID, wifi_ssid, &ssid_len) != ESP_OK) {
             strncpy(wifi_ssid, DEFAULT_WIFI_SSID, sizeof(wifi_ssid)-1);
             nvs_set_str(nvs_handle, WIFI_NVS_KEY_SSID, wifi_ssid);
         }
+        // Try to read password from NVS, fallback to default if not found
         if (nvs_get_str(nvs_handle, WIFI_NVS_KEY_PASS, wifi_pass, &pass_len) != ESP_OK) {
             strncpy(wifi_pass, DEFAULT_WIFI_PASS, sizeof(wifi_pass)-1);
             nvs_set_str(nvs_handle, WIFI_NVS_KEY_PASS, wifi_pass);
         }
+        // Commit changes and close NVS handle
         nvs_commit(nvs_handle);
         nvs_close(nvs_handle);
     } else {
+        // If NVS open fails, use default values
         strncpy(wifi_ssid, DEFAULT_WIFI_SSID, sizeof(wifi_ssid)-1);
         strncpy(wifi_pass, DEFAULT_WIFI_PASS, sizeof(wifi_pass)-1);
     }
 }
 
+// Load MQTT broker URL from NVS
 void load_mqtt_config_from_nvs() {
     nvs_handle_t nvs_handle;
     esp_err_t err = nvs_open(WIFI_NVS_NAMESPACE, NVS_READWRITE, &nvs_handle);
     if (err == ESP_OK) {
         size_t url_len = sizeof(mqtt_broker_url);
+        // Try to read broker URL, fallback to default if not found
         if (nvs_get_str(nvs_handle, MQTT_NVS_KEY_URL, mqtt_broker_url, &url_len) != ESP_OK) {
             strncpy(mqtt_broker_url, DEFAULT_MQTT_BROKER_URL, sizeof(mqtt_broker_url)-1);
             nvs_set_str(nvs_handle, MQTT_NVS_KEY_URL, mqtt_broker_url);
@@ -436,11 +515,13 @@ void load_mqtt_config_from_nvs() {
     }
 }
 
+// Load sample interval from NVS
 void load_sample_interval_from_nvs() {
     nvs_handle_t nvs_handle;
     esp_err_t err = nvs_open(WIFI_NVS_NAMESPACE, NVS_READWRITE, &nvs_handle);
     if (err == ESP_OK) {
         int64_t val = 0;
+        // Try to read sample interval, fallback to default if not found
         if (nvs_get_i64(nvs_handle, NVS_KEY_SAMPLE_INTERVAL, &val) == ESP_OK && val > 0) {
             sample_interval_ms = (long)val;
         } else {
@@ -454,6 +535,7 @@ void load_sample_interval_from_nvs() {
     }
 }
 
+// Load MQTT data topic from NVS
 void load_data_topic_from_nvs() {
     ESP_LOGI(TAG, "=== LOADING DATA TOPIC FROM NVS ===");
     ESP_LOGI(TAG, "Initial data_topic value: '%s'", data_topic);
@@ -465,7 +547,7 @@ void load_data_topic_from_nvs() {
     if (err == ESP_OK) {
         size_t topic_len = sizeof(data_topic);
         ESP_LOGI(TAG, "Attempting to read NVS key '%s', buffer size: %d", NVS_KEY_DATA_TOPIC, topic_len);
-        
+        // Try to read topic, fallback to default if not found
         esp_err_t get_err = nvs_get_str(nvs_handle, NVS_KEY_DATA_TOPIC, data_topic, &topic_len);
         ESP_LOGI(TAG, "NVS get_str result: %s", esp_err_to_name(get_err));
         
@@ -571,45 +653,37 @@ void init_spiffs() {
 }
 
 // HTTP handler for /params.json
+// HTTP handler for /params.json endpoint
 esp_err_t params_json_get_handler(httpd_req_t *req) {
     ESP_LOGI(TAG, "=== PARAMS.JSON REQUEST ===");
-    
-    // Debug: Show counter before reloading from NVS
+    // Show watchdog counter before and after reload for debugging
     ESP_LOGI(TAG, "*** DEBUG: watchdog_reset_counter before reload: %lu ***", watchdog_reset_counter);
-    
-    // Reload watchdog counter from NVS to ensure latest value is displayed
-    load_watchdog_counter_from_nvs();
-    
-    // Debug: Show counter after reloading from NVS
+    load_watchdog_counter_from_nvs(); // Reload latest value from NVS
     ESP_LOGI(TAG, "*** DEBUG: watchdog_reset_counter after reload: %lu ***", watchdog_reset_counter);
-    
+    // Log current configuration values
     ESP_LOGI(TAG, "Current data_topic variable: '%s'", data_topic);
     ESP_LOGI(TAG, "Current wifi_ssid: '%s'", wifi_ssid);
     ESP_LOGI(TAG, "Current mqtt_broker_url: '%s'", mqtt_broker_url);
     ESP_LOGI(TAG, "Current sample_interval_ms: %ld", sample_interval_ms);
     ESP_LOGI(TAG, "Current watchdog_reset_counter: %lu", watchdog_reset_counter);
-    
-    // Create JSON response with sensor configuration
+    // Create JSON response object
     cJSON *json = cJSON_CreateObject();
     cJSON *sensors = cJSON_CreateObject();
-    
-    // Basic configuration
+    // Add basic configuration to JSON
     cJSON_AddStringToObject(json, "ssid", wifi_ssid);
     cJSON_AddStringToObject(json, "password", wifi_pass);
     cJSON_AddStringToObject(json, "mqtt_url", mqtt_broker_url);
     cJSON_AddNumberToObject(json, "sample_interval", sample_interval_ms);
     cJSON_AddStringToObject(json, "data_topic", data_topic);
     cJSON_AddNumberToObject(json, "watchdog_reset_counter", watchdog_reset_counter);
-    
-    // Sensor configurations
+    // Add sensor configurations to JSON
     for (int i = 0; i < SENSOR_TYPE_MAX_COUNT; i++) {
         sensor_config_t *config = sensor_config_get((sensor_type_t)i);
         if (config) {
             cJSON *sensor_obj = cJSON_CreateObject();
             cJSON_AddBoolToObject(sensor_obj, "enabled", config->enabled);
             cJSON_AddStringToObject(sensor_obj, "name", config->name);
-            
-            // Add sensor-specific objects
+            // Add sensor-specific objects by type
             switch (i) {
                 case SENSOR_TYPE_BH1750:
                     cJSON_AddItemToObject(sensors, "bh1750", sensor_obj);
@@ -635,44 +709,36 @@ esp_err_t params_json_get_handler(httpd_req_t *req) {
             }
         }
     }
-    
     cJSON_AddItemToObject(json, "sensors", sensors);
-    
-    // Add wind speed configuration parameters
+    // Add wind speed configuration parameters from NVS
     nvs_handle_t wind_nvs_handle;
     esp_err_t nvs_err = nvs_open("wind_config", NVS_READONLY, &wind_nvs_handle);
     if (nvs_err == ESP_OK) {
         uint32_t reading_interval = 2000;
         uint32_t avg_period = 60000;
         uint32_t gust_period = 300000;
-        
         nvs_get_u32(wind_nvs_handle, "reading_interval", &reading_interval);
         nvs_get_u32(wind_nvs_handle, "avg_period", &avg_period);
         nvs_get_u32(wind_nvs_handle, "gust_period", &gust_period);
-        
         cJSON_AddNumberToObject(json, "wind_reading_interval_ms", reading_interval);
         cJSON_AddNumberToObject(json, "wind_avg_period_ms", avg_period);
         cJSON_AddNumberToObject(json, "wind_gust_period_ms", gust_period);
-        
         nvs_close(wind_nvs_handle);
         ESP_LOGI(TAG, "Wind config loaded: interval=%lu, avg=%lu, gust=%lu", reading_interval, avg_period, gust_period);
     } else {
-        // Use default values if no config found
+        // Use default values if config not found
         cJSON_AddNumberToObject(json, "wind_reading_interval_ms", 2000);
         cJSON_AddNumberToObject(json, "wind_avg_period_ms", 60000);
         cJSON_AddNumberToObject(json, "wind_gust_period_ms", 300000);
         ESP_LOGI(TAG, "Wind config NVS not found, using defaults");
     }
-    
+    // Print and send JSON response
     char *json_string = cJSON_Print(json);
     ESP_LOGI(TAG, "Sending params.json response: %s", json_string);
-    
     httpd_resp_set_type(req, "application/json");
     httpd_resp_send(req, json_string, HTTPD_RESP_USE_STRLEN);
-    
     free(json_string);
     cJSON_Delete(json);
-    
     ESP_LOGI(TAG, "=== PARAMS.JSON RESPONSE SENT ===");
     return ESP_OK;
 }
@@ -993,7 +1059,6 @@ esp_err_t parameters_html_handler(httpd_req_t *req) {
     while ((n = fread(buf, 1, sizeof(buf), f)) > 0) {
         httpd_resp_send_chunk(req, buf, n);
     }
-    fclose(f);
     httpd_resp_send_chunk(req, NULL, 0);
     return ESP_OK;
 }
@@ -1023,6 +1088,48 @@ esp_err_t captive_redirect_handler(httpd_req_t *req) {
     
     const char* redirect_html = 
         "<!DOCTYPE html>\n"
+/**
+ * @file main.c
+ * @brief Main entry point for ESP32-MQTT-Weather configurable sensor system.
+ * @author JohnDevine
+ * @date 2025
+ * @uml{start}
+ * @uml{component: ESP32-MQTT-Weather}
+ * @uml{depends: sensor_config.h, i2c_scanner.h, esp_wifi.h, mqtt_client.h, cJSON.h, ...}
+ * @uml{end}
+ *
+ * This project implements an ESP32-based sensor monitoring system that reads
+ * data from configurable sensors and publishes the measurements to an MQTT broker.
+ *
+ * @section Features
+ * - Runtime configurable sensor enable/disable through web interface
+ * - Multiple sensor support with individual MQTT topics
+ * - MQTT connectivity with automatic reconnection handling
+ * - WiFi configuration with captive portal for easy setup
+ * - Web-based configuration interface for all parameters
+ * - Watchdog timer for system reliability
+ * - Persistent configuration storage (NVS)
+ * - Automatic version management and build automation
+ *
+ * @section Hardware
+ * - ESP32 development board
+ * - Supported sensors: BH1750 (light), BME680 (environmental), etc.
+ * - Pull-up resistors for I2C lines if using I2C (typically 4.7kOhm)
+ *
+ * @section DataOutput
+ * - Combined JSON message with processor metrics and all enabled sensor data
+ * - Individual sensor enable/disable configuration
+ * - JSON format via MQTT for integration with home automation systems
+ *
+ * @section Customization
+ * Search for "TEMPLATE:" comments throughout the code to find areas that need
+ * customization for your specific sensor(s) and use case.
+ *
+ * @section ToDo
+ * - Implement DHT22, DS18B20, BME280 sensor reading logic
+ * - Add additional sensor support as needed
+ * - Refactor for modularity if new sensors added
+ */
         "<html>\n"
         "<head>\n"
         "<meta charset=\"UTF-8\">\n"
@@ -1131,6 +1238,15 @@ static esp_err_t sysinfo_json_get_handler(httpd_req_t *req) {
 
 // OTA Firmware Update Handler
 static esp_err_t ota_firmware_handler(httpd_req_t *req) {
+    /**
+     * @brief HTTP handler for OTA firmware update
+     * This function receives a firmware binary via HTTP POST and writes it to the OTA partition.
+     * It handles chunked uploads, error checking, and partition management.
+     * On success, the new firmware is written and the device reboots to apply the update.
+     *
+     * @param req HTTP request pointer
+     * @return ESP_OK on success, ESP_FAIL on error
+     */
     ESP_LOGI(TAG, "OTA firmware handler called - Content-Length: %d", req->content_len);
     ESP_LOGI(TAG, "Request method: %d, URI: %s", req->method, req->uri);
     
@@ -1292,6 +1408,15 @@ static esp_err_t ota_firmware_handler(httpd_req_t *req) {
 
 // OTA Filesystem Update Handler
 static esp_err_t ota_filesystem_handler(httpd_req_t *req) {
+    /**
+     * @brief HTTP handler for OTA filesystem update
+     * This function receives a filesystem image via HTTP POST and writes it to the SPIFFS partition.
+     * It handles chunked uploads, error checking, and partition management.
+     * On success, the new filesystem is written and the device can reboot to use it.
+     *
+     * @param req HTTP request pointer
+     * @return ESP_OK on success, ESP_FAIL on error
+     */
     ESP_LOGI(TAG, "OTA filesystem handler called - Content-Length: %d", req->content_len);
     ESP_LOGI(TAG, "Request method: %d, URI: %s", req->method, req->uri);
     
@@ -1813,6 +1938,24 @@ void app_main(void) {
     wifi_init_sta(); // Initialize Wi-Fi
     
     // Initialize software watchdog
+    /**
+     * @brief Main entry point for ESP32-MQTT-Weather application
+     * This function initializes system components, loads configuration, sets up sensors,
+     * and enters the main loop to periodically read sensor data and publish to MQTT.
+     *
+     * Major steps:
+     * 1. Set logging level for debugging
+     * 2. Initialize NVS (persistent storage)
+     * 3. Configure and start the Task Watchdog Timer
+     * 4. Initialize network stack (WiFi, event loop)
+     * 5. Wait for boot button press to enter AP config mode
+     * 6. Load configuration from NVS (WiFi, MQTT, sample interval, data topic, watchdog)
+     * 7. Initialize sensor configuration system and enabled sensors
+     * 8. Initialize SPIFFS filesystem
+     * 9. Initialize WiFi in station mode
+     * 10. Configure software watchdog based on sample interval
+     * 11. Main loop: read sensors, publish to MQTT, handle watchdog, delay
+     */
     // Watchdog timeout is 10× sample interval (in ms), inactive if timeout ≤10,000 ms
     watchdog_timeout_ms = sample_interval_ms * 10;
     if (watchdog_timeout_ms > 10000) {
@@ -1829,8 +1972,10 @@ void app_main(void) {
     while (1) {
         ESP_LOGD(TAG, "[MAIN LOOP] Start iteration");
         esp_task_wdt_reset();
+    // Show initial watchdog counter value for debugging
         
         // Check software watchdog timeout - only triggers if no MQTT data published
+    // Configure Task Watchdog Timer to monitor system health
         ESP_LOGD(TAG, "[MAIN LOOP] Check software watchdog");
         if (watchdog_enabled) {
             TickType_t current_time = xTaskGetTickCount();
@@ -1849,11 +1994,13 @@ void app_main(void) {
                 ESP_LOGE(TAG, "*** DEBUG: watchdog_reset_counter AFTER increment: %lu ***", watchdog_reset_counter);
                 
                 save_watchdog_counter_to_nvs();
+    // Initialize network stack for WiFi and event handling
                 
                 // Debug: Verify save by reloading from NVS
                 uint32_t verify_counter = 0;
                 nvs_handle_t verify_handle;
                 esp_err_t verify_err = nvs_open(WIFI_NVS_NAMESPACE, NVS_READONLY, &verify_handle);
+    // Wait for boot button press to enter AP config mode (10 seconds)
                 if (verify_err == ESP_OK) {
                     esp_err_t get_err = nvs_get_u32(verify_handle, NVS_KEY_WATCHDOG_COUNTER, &verify_counter);
                     ESP_LOGE(TAG, "*** DEBUG: Verification read from NVS result: %s, value: %lu ***", 
@@ -1879,16 +2026,20 @@ void app_main(void) {
         if (sensor_read_success) {
             ESP_LOGD(TAG, "[MAIN LOOP] Sensor read successful, data will be published to MQTT");
         } else {
+    // Sensor initialization is now handled by the configurable sensor system
             ESP_LOGW(TAG, "[MAIN LOOP] Sensor read failed, no MQTT data will be published this cycle");
         }
+    // Show watchdog counter before loading from NVS
         ESP_LOGD(TAG, "[MAIN LOOP] After read_sensor_data");
 
+    // Load configuration from NVS (persistent storage)
         if (debug_logging) {
             ESP_LOGI(TAG, "Waiting %ld ms before next sensor read cycle...", sample_interval_ms);
         }
         if (sample_interval_ms > 5000) {
             uint32_t remaining_ms = sample_interval_ms;
             while (remaining_ms > 0) {
+    // Initialize sensor configuration system and enabled sensors
                 uint32_t chunk_ms = (remaining_ms > 5000) ? 5000 : remaining_ms;
                 vTaskDelay(pdMS_TO_TICKS(chunk_ms));
                 esp_task_wdt_reset();
@@ -1941,8 +2092,10 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base,
 // Wi-Fi Initialization
 void wifi_init_sta(void)
 {
+    // Show watchdog counter after loading from NVS
     // Note: esp_netif_init() and esp_event_loop_create_default() 
     // are already called in main app initialization
+    // Log loaded configuration for debugging
     esp_netif_create_default_wifi_sta();
 
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
@@ -1951,14 +2104,17 @@ void wifi_init_sta(void)
     esp_event_handler_instance_t instance_any_id;
     esp_event_handler_instance_t instance_got_ip;
     ESP_ERROR_CHECK(esp_event_handler_instance_register(WIFI_EVENT,
+    // Initialize SPIFFS filesystem for web interface and config
                                                         ESP_EVENT_ANY_ID,
                                                         &wifi_event_handler,
                                                         NULL,
                                                         &instance_any_id));
+    // Initialize WiFi in station mode for normal operation
     ESP_ERROR_CHECK(esp_event_handler_instance_register(IP_EVENT,
                                                         IP_EVENT_STA_GOT_IP,
                                                         &wifi_event_handler,
                                                         NULL,
+    // Configure software watchdog based on sample interval
                                                         &instance_got_ip));
 
     wifi_config_t wifi_config = {
@@ -1971,6 +2127,7 @@ void wifi_init_sta(void)
     strncpy((char*)wifi_config.sta.ssid, wifi_ssid, sizeof(wifi_config.sta.ssid)-1);
     strncpy((char*)wifi_config.sta.password, wifi_pass, sizeof(wifi_config.sta.password)-1);
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA) );
+    // Main loop: periodically read sensor data and publish to MQTT
     ESP_ERROR_CHECK(esp_wifi_set_config(ESP_IF_WIFI_STA, &wifi_config) );
     ESP_ERROR_CHECK(esp_wifi_start() );
 

@@ -827,7 +827,7 @@
           "refId": "A"
         }
       ],
-      "title": "Current Wind Speed",
+      "title": "WIND NOW",
       "type": "gauge"
     },
     {
@@ -845,7 +845,7 @@
             "axisBorderShow": false,
             "axisCenteredZero": false,
             "axisColorMode": "text",
-            "axisLabel": "Wind Speed (m/s)",
+            "axisLabel": "Wind Speed",
             "axisPlacement": "auto",
             "barAlignment": 0,
             "barWidthFactor": 0.6,
@@ -1059,7 +1059,7 @@
           "refId": "A"
         }
       ],
-      "title": "Current Wind Gust",
+      "title": "GUSTS",
       "type": "gauge"
     },
     {
@@ -1218,5 +1218,5 @@
   "timezone": "browser",
   "title": "Weather",
   "uid": "709e976a-de91-4d01-9a41-9bca394bb7ed",
-  "version": 3
+  "version": 6
 }

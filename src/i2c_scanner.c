@@ -1,8 +1,18 @@
-/*
  * I2C Bus Scanner - Debug Tool
  * 
  * This utility scans the I2C bus and reports all responding devices
  * and their chip IDs. Useful for diagnosing sensor issues.
+ */
+/**
+ * @file i2c_scanner.c
+ * @brief I2C Bus Scanner utility for ESP32-MQTT-Weather
+ * @uml{component: I2C Scanner}
+ * @uml{depends: i2c_scanner.h, driver/i2c_master.h, esp_log.h}
+ *
+ * Scans I2C bus and reports responding devices and chip IDs for diagnostics.
+ *
+ * @section ToDo
+ * - Add support for more detailed device identification
  */
 
 #include "i2c_scanner.h"

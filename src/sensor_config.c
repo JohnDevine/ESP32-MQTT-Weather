@@ -1,5 +1,16 @@
-/*
  * ESP32 MQTT Configurable Sensor System Implementation
+ */
+/**
+ * @file sensor_config.c
+ * @brief Sensor configuration system implementation for ESP32-MQTT-Weather
+ * @uml{component: Sensor Config}
+ * @uml{depends: sensor_config.h, nvs_flash.h, cJSON.h}
+ *
+ * Implements runtime sensor configuration, NVS storage, and data cache management.
+ *
+ * @section ToDo
+ * - Add support for additional sensor types
+ * - Refactor for modularity if new sensors added
  */
 
 #include "sensor_config.h"

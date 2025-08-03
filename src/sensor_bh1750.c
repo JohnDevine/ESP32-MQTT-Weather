@@ -1,8 +1,19 @@
-/*
  * BH1750 Light Sensor Implementation
  * 
  * This module implements the BH1750 digital light sensor driver
  * with I2C communication for the ESP32 MQTT sensor system.
+ */
+/**
+ * @file sensor_bh1750.c
+ * @brief BH1750 Light Sensor Driver for ESP32-MQTT-Weather
+ * @uml{component: BH1750 Sensor}
+ * @uml{depends: sensor_config.h, driver/i2c_master.h, esp_log.h}
+ *
+ * Implements digital light sensor reading via I2C. Provides lux measurement and initialization.
+ *
+ * @section ToDo
+ * - Add error handling for edge cases
+ * - Support additional measurement modes if needed
  */
 
 #include "sensor_config.h"
@@ -12,6 +23,11 @@
 #include "freertos/task.h"
 #include <string.h>
 
+/**
+ * @var TAG
+ * @brief Logging tag for BH1750 module
+ * @uml{attribute: TAG}
+ */
 static const char *TAG = "BH1750";
 
 // BH1750 I2C Configuration
@@ -45,6 +61,11 @@ static i2c_master_dev_handle_t bh1750_dev_handle = NULL;
 static bool bh1750_initialized = false;
 
 // Function to initialize I2C bus (shared with other sensors)
+/**
+ * @brief Initializes I2C bus for BH1750 sensor
+ * @return ESP_OK on success, error code otherwise
+ * @uml{method: bh1750_init_i2c}
+ */
 static esp_err_t bh1750_init_i2c(void) {
     if (i2c_bus_handle != NULL) {
         // I2C bus already initialized
@@ -72,6 +93,12 @@ static esp_err_t bh1750_init_i2c(void) {
 }
 
 // Function to send command to BH1750
+/**
+ * @brief Sends a command to the BH1750 sensor via I2C
+ * @param command Command byte
+ * @return ESP_OK on success, error code otherwise
+ * @uml{method: bh1750_send_command}
+ */
 static esp_err_t bh1750_send_command(uint8_t command) {
     esp_err_t ret = i2c_master_transmit(bh1750_dev_handle, &command, 1, I2C_MASTER_TIMEOUT_MS);
     if (ret != ESP_OK) {
@@ -81,6 +108,12 @@ static esp_err_t bh1750_send_command(uint8_t command) {
 }
 
 // Function to read data from BH1750
+/**
+ * @brief Reads raw data from BH1750 sensor
+ * @param raw_data Pointer to store raw data
+ * @return ESP_OK on success, error code otherwise
+ * @uml{method: bh1750_read_data}
+ */
 static esp_err_t bh1750_read_data(uint16_t *raw_data) {
     uint8_t data[2];
     esp_err_t ret = i2c_master_receive(bh1750_dev_handle, data, 2, I2C_MASTER_TIMEOUT_MS);
@@ -94,6 +127,11 @@ static esp_err_t bh1750_read_data(uint16_t *raw_data) {
     return ret;
 }
 
+/**
+ * @brief Initializes the BH1750 sensor and configures measurement settings
+ * @return ESP_OK on success, error code otherwise
+ * @uml{method: sensor_bh1750_init}
+ */
 esp_err_t sensor_bh1750_init(void) {
     if (bh1750_initialized) {
         return ESP_OK;
@@ -145,6 +183,12 @@ esp_err_t sensor_bh1750_init(void) {
     return ESP_OK;
 }
 
+/**
+ * @brief Reads light intensity from BH1750 sensor and fills sensor_data_t
+ * @param data Pointer to sensor_data_t structure
+ * @return ESP_OK on success, error code otherwise
+ * @uml{method: sensor_bh1750_read}
+ */
 esp_err_t sensor_bh1750_read(sensor_data_t* data) {
     if (!bh1750_initialized) {
         ESP_LOGE(TAG, "BH1750 not initialized");
@@ -192,11 +236,21 @@ esp_err_t sensor_bh1750_read(sensor_data_t* data) {
 }
 
 // Function to get I2C bus handle for other sensors
+/**
+ * @brief Returns I2C bus handle for use by other sensors
+ * @return i2c_master_bus_handle_t
+ * @uml{method: bh1750_get_i2c_bus_handle}
+ */
 i2c_master_bus_handle_t bh1750_get_i2c_bus_handle(void) {
     return i2c_bus_handle;
 }
 
 // Function to check if BH1750 is initialized
+/**
+ * @brief Returns true if BH1750 sensor is initialized
+ * @return true if initialized, false otherwise
+ * @uml{method: bh1750_is_initialized}
+ */
 bool bh1750_is_initialized(void) {
     return bh1750_initialized;
 }
